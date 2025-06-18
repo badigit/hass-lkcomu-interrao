@@ -1,5 +1,8 @@
+import logging
 from typing import Any, ClassVar, Dict, Hashable, Iterable, Mapping, Optional, Type, TypeVar
+from asyncio import TimeoutError
 
+import aiohttp
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.typing import ConfigType
@@ -17,7 +20,9 @@ from custom_components.lkcomu_interrao.const import (
     FORMAT_VAR_TYPE_RU,
 )
 from inter_rao_energosbyt.interfaces import AbstractAccountWithPayments, AbstractPayment, Account
+from inter_rao_energosbyt.exceptions import EnergosbytException
 
+_LOGGER = logging.getLogger(__name__)
 _TLkcomuInterRAOEntity = TypeVar("_TLkcomuInterRAOEntity", bound=LkcomuInterRAOEntity)
 
 
@@ -79,7 +84,10 @@ class LkcomuInterRAOLastPayment(
         return None
 
     async def async_update_internal(self) -> None:
-        self._last_payment = await self._account.async_get_last_payment()
+        try:
+            self._last_payment = await self._account.async_get_last_payment()
+        except (EnergosbytException, aiohttp.ClientError, TimeoutError) as e:
+            _LOGGER.warning("Error updating %s for account %s (%s): %s. Data may be stale.", self.entity_id, self._account.id, self._account.code, e)
 
     #################################################################################
     # Data-oriented implementation of inherent class

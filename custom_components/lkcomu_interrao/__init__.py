@@ -14,7 +14,9 @@ __all__ = (
 import asyncio
 import logging
 from typing import Any, Dict, List, Mapping, Optional, TYPE_CHECKING, Tuple
+from asyncio import TimeoutError
 
+import aiohttp
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.components.binary_sensor import DOMAIN as BINARY_SENSOR_DOMAIN
@@ -243,7 +245,7 @@ async def async_setup_entry(
     from inter_rao_energosbyt.exceptions import EnergosbytException
 
     try:
-        api_cls = import_api_cls(type_)
+        api_cls = await import_api_cls(hass, type_)
     except (ImportError, AttributeError):
         _LOGGER.error(
             log_prefix
@@ -276,19 +278,19 @@ async def async_setup_entry(
                 with_related=True
             )
 
-        except EnergosbytException as e:
-            err_cls = ConfigEntryNotReady
-            err_txt = "Ошибка при авторизации" if IS_IN_RUSSIA else "Error during authentication"
-
-            if len(e.args) == 3:
+        except (EnergosbytException, aiohttp.ClientError, TimeoutError) as e:
+            if isinstance(e, EnergosbytException) and len(e.args) == 3:
                 error_code = e.args[1]
-                if error_code in (131, 127, 114):
-                    err_cls = ConfigEntryAuthFailed
-                    err_txt = "Ошибка авторизации" if IS_IN_RUSSIA else "Error authenticating"
+                if error_code in (131, 127, 114):  # Specific auth errors
+                    _LOGGER.error(log_prefix + "Ошибка авторизации (Authentication error): " + repr(e))
+                    raise ConfigEntryAuthFailed(repr(e)) from e
 
-            err_txt += ": " + repr(e)
-            _LOGGER.error(log_prefix + err_txt)
-            raise err_cls(repr(e))
+            _LOGGER.warning(
+                log_prefix +
+                ("Не удалось подключиться к API Мосэнергосбыт. Попытка будет повторена. Ошибка: " if IS_IN_RUSSIA else "Could not connect to Mosenergosbyt API. Will retry. Error: ") +
+                repr(e)
+            )
+            raise ConfigEntryNotReady(repr(e)) from e
 
     except BaseException:
         await api_object.async_close()

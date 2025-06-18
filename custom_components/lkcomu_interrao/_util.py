@@ -19,6 +19,8 @@ from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_TYPE, CONF_USERNAME
 from homeassistant.core import callback
+import functools
+
 from homeassistant.helpers.entity_platform import EntityPlatform
 from homeassistant.core import HomeAssistant
 
@@ -57,8 +59,12 @@ def _find_existing_entry(
             return config_entry
 
 
-def import_api_cls(type_: str) -> Type["BaseEnergosbytAPI"]:
-    return __import__("inter_rao_energosbyt.api." + type_, globals(), locals(), ("API",)).API
+async def import_api_cls(hass: HomeAssistant, type_: str) -> Type["BaseEnergosbytAPI"]:
+    """Import API class by type."""
+    module = await hass.async_add_executor_job(
+        functools.partial(__import__, "inter_rao_energosbyt.api." + type_, globals(), locals(), ("API",))
+    )
+    return module.API
 
 
 _RE_USERNAME_MASK = re.compile(r"^(\W*)(.).*(.)$")

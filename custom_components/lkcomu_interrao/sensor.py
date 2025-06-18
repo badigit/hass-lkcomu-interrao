@@ -19,6 +19,8 @@ from typing import (
 )
 
 import voluptuous as vol
+from asyncio import TimeoutError
+import aiohttp
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
@@ -338,16 +340,19 @@ class LkcomuAccount(LkcomuInterRAOEntity[Account], SensorEntity):
                 entity.async_schedule_update_ha_state(force_refresh=True)
 
     async def async_update_internal(self) -> None:
-        await self._account.async_update_related()
-        account = self._account
+        try:
+            await self._account.async_update_related()
+            account = self._account
 
-        if isinstance(account, AbstractAccountWithBalance):
-            self._balance = await account.async_get_balance()
+            if isinstance(account, AbstractAccountWithBalance):
+                self._balance = await account.async_get_balance()
 
-        if isinstance(account, AccountWithBytInfo):
-            await account.async_update_info()
+            if isinstance(account, AccountWithBytInfo):
+                await account.async_update_info()
 
-        self.register_supported_services(account)
+            self.register_supported_services(account)
+        except (EnergosbytException, aiohttp.ClientError, TimeoutError) as e:
+            _LOGGER.warning("Error updating %s for account %s (%s): %s. Data may be stale.", self.entity_id, self._account.id, self._account.code, e)
 
     #################################################################################
     # Services callbacks
@@ -397,12 +402,20 @@ class LkcomuAccount(LkcomuInterRAOEntity[Account], SensorEntity):
                 event_data[ATTR_SUM] += payment.amount
                 results.append(payment_to_attrs(payment))
 
-        except BaseException as e:
-            event_data[ATTR_COMMENT] = "Unknown error: %r" % e
-            _LOGGER.exception(event_data[ATTR_COMMENT])
-            raise
+        except (EnergosbytException, aiohttp.ClientError, TimeoutError) as e:
+            event_data[ATTR_COMMENT] = f"API or Network Error: {e!r}"
+            _LOGGER.error("%s API or Network Error during get_payments: %r", self.log_prefix, e)
+            # ATTR_SUCCESS remains False (default based on initialization)
+
+        except Exception as e:
+            event_data[ATTR_COMMENT] = f"Unexpected error: {e!r}"
+            _LOGGER.exception("%s Unexpected error during get_payments: %r", self.log_prefix, e)
+            # ATTR_SUCCESS remains False (default based on initialization)
+
         else:
             event_data[ATTR_SUCCESS] = True
+            # Optionally, set a success comment:
+            # event_data[ATTR_COMMENT] = "Successfully retrieved payments"
 
         finally:
             self.hass.bus.async_fire(
@@ -449,12 +462,19 @@ class LkcomuAccount(LkcomuInterRAOEntity[Account], SensorEntity):
                 event_data[ATTR_SUM] += invoice.total
                 results.append(invoice_to_attrs(invoice))
 
-        except BaseException as e:
-            event_data[ATTR_COMMENT] = "Unknown error: %r" % e
-            _LOGGER.exception(event_data[ATTR_COMMENT])
-            raise
+        except (EnergosbytException, aiohttp.ClientError, TimeoutError) as e:
+            event_data[ATTR_COMMENT] = f"API or Network Error: {e!r}"
+            _LOGGER.error("%s API or Network Error during get_invoices: %r", self.log_prefix, e)
+            # ATTR_SUCCESS remains False (default)
+
+        except Exception as e:
+            event_data[ATTR_COMMENT] = f"Unexpected error: {e!r}"
+            _LOGGER.exception("%s Unexpected error during get_invoices: %r", self.log_prefix, e)
+            # ATTR_SUCCESS remains False (default)
+
         else:
             event_data[ATTR_SUCCESS] = True
+            # event_data[ATTR_COMMENT] = "Successfully retrieved invoices" # Optional
 
         finally:
             self.hass.bus.async_fire(
@@ -484,18 +504,23 @@ class LkcomuAccount(LkcomuInterRAOEntity[Account], SensorEntity):
                 description=event_data[ATTR_DESCRIPTION],
                 update=False,
             )
-
         except EnergosbytException as e:
-            event_data[ATTR_COMMENT] = "Error: %s" % e
-            raise
+            event_data[ATTR_COMMENT] = f"API Error: {e!s}"
+            _LOGGER.error("%s API Error during set_description: %s", self.log_prefix, e)
+            # ATTR_SUCCESS remains False
+
+        except (aiohttp.ClientError, TimeoutError) as e:
+            event_data[ATTR_COMMENT] = f"Network Error: {e!r}"
+            _LOGGER.error("%s Network Error during set_description: %r", self.log_prefix, e)
+            # ATTR_SUCCESS remains False
 
         except Exception as e:
-            event_data[ATTR_COMMENT] = "Unknown error: %s" % e
-            _LOGGER.exception("Unknown error: %s", e)
-            raise
+            event_data[ATTR_COMMENT] = f"Unexpected error: {e!r}"
+            _LOGGER.exception("%s Unexpected error during set_description: %r", self.log_prefix, e)
+            # ATTR_SUCCESS remains False
 
         else:
-            event_data[ATTR_COMMENT] = "Successful calculation"
+            event_data[ATTR_COMMENT] = "Successful calculation" # Keeping original comment
             event_data[ATTR_SUCCESS] = True
             self.async_schedule_update_ha_state(force_refresh=True)
 
@@ -525,7 +550,7 @@ class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters], SensorEntity)
     }
 
     def __init__(self, *args, meter: AbstractMeter, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, *kwargs)
         self._meter = meter
 
         self.entity_id: Optional[str] = f"sensor." + slugify(
@@ -546,7 +571,11 @@ class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters], SensorEntity)
     ):
         new_meter_entities = []
         if isinstance(account, AbstractAccountWithMeters):
-            meters = await account.async_get_meters()
+            try:
+                meters = await account.async_get_meters()
+            except (EnergosbytException, aiohttp.ClientError, TimeoutError) as e:
+                _LOGGER.error("Error refreshing accounts (specifically, fetching details like meters) for account %s during setup/reload: %s", account.id, e)
+                meters = {}  # Return empty dict to prevent further errors
 
             for meter_id, meter in meters.items():
                 entity_key = (account.id, meter_id)
@@ -567,14 +596,16 @@ class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters], SensorEntity)
         return new_meter_entities if new_meter_entities else None
 
     async def async_update_internal(self) -> None:
-        meters = await self._account.async_get_meters()
-        meter = meters.get(self._meter.id)
-        if meter is None:
-            self.hass.async_create_task(self.async_remove())
-        else:
-            self.register_supported_services(meter)
-
-            self._meter = meter
+        try:
+            meters = await self._account.async_get_meters()
+            meter = meters.get(self._meter.id)
+            if meter is None:
+                self.hass.async_create_task(self.async_remove())
+            else:
+                self.register_supported_services(meter)
+                self._meter = meter
+        except (EnergosbytException, aiohttp.ClientError, TimeoutError) as e:
+            _LOGGER.warning("Error updating %s (meter %s) for account %s (%s): %s. Data may be stale.", self.entity_id, self._meter.id, self._account.id, self._account.code, e)
 
     #################################################################################
     # Data-oriented implementation of inherent class
@@ -774,15 +805,17 @@ class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters], SensorEntity)
                     ignore_periods=call_data[ATTR_IGNORE_PERIOD],
                     ignore_values=call_data[ATTR_IGNORE_INDICATIONS],
                 )
-
             except EnergosbytException as e:
-                event_data[ATTR_COMMENT] = "API error: %s" % e
-                raise
+                event_data[ATTR_COMMENT] = f"API error: {e!s}"
+                _LOGGER.error("%s API error during push_indications: %s", self.log_prefix, e)
 
-            except BaseException as e:
-                event_data[ATTR_COMMENT] = "Unknown error: %r" % e
-                _LOGGER.error(event_data[ATTR_COMMENT])
-                raise
+            except (aiohttp.ClientError, TimeoutError) as e:
+                event_data[ATTR_COMMENT] = f"Network Error: {e!r}"
+                _LOGGER.error("%s Network Error during push_indications: %r", self.log_prefix, e)
+
+            except Exception as e:
+                event_data[ATTR_COMMENT] = f"Unexpected error: {e!r}"
+                _LOGGER.exception("%s Unexpected error during push_indications: %r", self.log_prefix, e)
 
             else:
                 event_data[ATTR_COMMENT] = "Indications submitted successfully"
@@ -826,21 +859,22 @@ class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters], SensorEntity)
                 ignore_periods=call_data[ATTR_IGNORE_PERIOD],
                 ignore_values=call_data[ATTR_IGNORE_INDICATIONS],
             )
-
         except EnergosbytException as e:
-            event_data[ATTR_COMMENT] = "Error: %s" % e
-            raise
+            event_data[ATTR_COMMENT] = f"API Error: {e!s}"
+            _LOGGER.error("%s API Error during calculate_indications: %s", self.log_prefix, e)
 
-        except BaseException as e:
-            event_data[ATTR_COMMENT] = "Unknown error: %r" % e
-            _LOGGER.exception(event_data[ATTR_COMMENT])
-            raise
+        except (aiohttp.ClientError, TimeoutError) as e:
+            event_data[ATTR_COMMENT] = f"Network Error: {e!r}"
+            _LOGGER.error("%s Network Error during calculate_indications: %r", self.log_prefix, e)
+
+        except Exception as e:
+            event_data[ATTR_COMMENT] = f"Unexpected error: {e!r}"
+            _LOGGER.exception("%s Unexpected error during calculate_indications: %r", self.log_prefix, e)
 
         else:
             event_data[ATTR_CHARGED] = float(calculation)
             event_data[ATTR_COMMENT] = "Successful calculation"
             event_data[ATTR_SUCCESS] = True
-
             self.async_schedule_update_ha_state(force_refresh=True)
 
         finally:
@@ -862,7 +896,7 @@ class LkcomuLastInvoice(LkcomuInterRAOEntity[AbstractAccountWithInvoices], Senso
     config_key = CONF_LAST_INVOICE
 
     def __init__(self, *args, last_invoice: Optional["AbstractInvoice"] = None, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, *kwargs)
         self._last_invoice = last_invoice
 
         self.entity_id: Optional[str] = "sensor." + slugify(
@@ -921,7 +955,10 @@ class LkcomuLastInvoice(LkcomuInterRAOEntity[AbstractAccountWithInvoices], Senso
         return None
 
     async def async_update_internal(self) -> None:
-        self._last_invoice = await self._account.async_get_last_invoice()
+        try:
+            self._last_invoice = await self._account.async_get_last_invoice()
+        except (EnergosbytException, aiohttp.ClientError, TimeoutError) as e:
+            _LOGGER.warning("Error updating %s for account %s: %s. Data may be stale.", self.entity_id, self._account.id, e)
 
 
 async_setup_entry = make_common_async_setup_entry(

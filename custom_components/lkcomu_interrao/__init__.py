@@ -239,23 +239,9 @@ async def async_setup_entry(
         user_cfg = yaml_config[unique_key]
 
     else:
-        # Source and convert configuration from input post_fields
-        all_cfg = {**config_entry.data}
-
-        if config_entry.options:
-            # Only merge known config keys, skip options-flow-only keys
-            # (entities, scan_interval, name_format, etc.)
-            from custom_components.lkcomu_interrao.const import (
-                CONF_ENTITIES,
-                CONF_NAME_FORMAT,
-            )
-            options_only_keys = {CONF_ENTITIES, CONF_SCAN_INTERVAL, CONF_NAME_FORMAT}
-            for key, value in config_entry.options.items():
-                if key not in options_only_keys:
-                    all_cfg[key] = value
-
+        # Validate entry data through config schema (credentials + account structure)
         try:
-            user_cfg = CONFIG_ENTRY_SCHEMA(all_cfg)
+            user_cfg = CONFIG_ENTRY_SCHEMA({**config_entry.data})
         except vol.Invalid as e:
             _LOGGER.error(
                 log_prefix
@@ -268,6 +254,11 @@ async def async_setup_entry(
                 + repr(e)
             )
             return False
+
+        # Apply options overrides (user_agent from options takes precedence)
+        if config_entry.options:
+            if CONF_USER_AGENT in config_entry.options:
+                user_cfg[CONF_USER_AGENT] = config_entry.options[CONF_USER_AGENT]
 
     _LOGGER.info(
         log_prefix

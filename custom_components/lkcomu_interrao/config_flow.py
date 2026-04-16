@@ -18,7 +18,6 @@ from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, OptionsFlow
 from homeassistant.const import (
     CONF_DEFAULT,
-    CONF_ENTITIES,
     CONF_PASSWORD,
     CONF_SCAN_INTERVAL,
     CONF_TYPE,
@@ -45,6 +44,7 @@ from custom_components.lkcomu_interrao.const import (
     API_TYPE_DEFAULT,
     API_TYPE_NAMES,
     CONF_ACCOUNTS,
+    CONF_ENTITIES,
     CONF_LAST_INVOICE,
     CONF_METERS,
     CONF_NAME_FORMAT,

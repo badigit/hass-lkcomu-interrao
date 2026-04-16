@@ -7,7 +7,6 @@ from typing import Any
 import voluptuous as vol
 from homeassistant.const import (
     CONF_DEFAULT,
-    CONF_ENTITIES,
     CONF_PASSWORD,
     CONF_SCAN_INTERVAL,
     CONF_TYPE,
@@ -15,11 +14,13 @@ from homeassistant.const import (
 )
 from homeassistant.helpers import config_validation as cv
 
+from custom_components.lkcomu_interrao._util import is_in_russia
 from custom_components.lkcomu_interrao.const import (
     API_TYPE_DEFAULT,
     API_TYPE_NAMES,
     CONF_ACCOUNTS,
     CONF_DEV_PRESENTATION,
+    CONF_ENTITIES,
     CONF_LAST_INVOICE,
     CONF_LAST_PAYMENT,
     CONF_LOGOS,
@@ -32,7 +33,6 @@ from custom_components.lkcomu_interrao.const import (
     DEFAULT_NAME_FORMAT_RU_METERS,
     DEFAULT_SCAN_INTERVAL,
 )
-
 MIN_SCAN_INTERVAL = timedelta(seconds=60)
 
 

@@ -36,6 +36,11 @@ from inter_rao_energosbyt.interfaces import (
 )
 
 from custom_components.lkcomu_interrao._util import import_api_cls
+from custom_components.lkcomu_interrao._schema import (
+    CONFIG_ENTRY_SCHEMA,
+    ENTITY_CODES_VALIDATORS,
+    ENTITY_CONF_VALIDATORS,
+)
 from custom_components.lkcomu_interrao.const import (
     API_TYPE_DEFAULT,
     API_TYPE_NAMES,
@@ -48,6 +53,8 @@ from custom_components.lkcomu_interrao.const import (
     DATA_ENTITIES,
     DOMAIN,
 )
+
+from homeassistant.core import callback
 
 if TYPE_CHECKING:
     from custom_components.lkcomu_interrao._base import LkcomuInterRAOEntity
@@ -109,41 +116,55 @@ class LkcomuInterRAOConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: ConfigType | None = None
     ) -> dict[str, Any]:
         """Handle a flow start."""
-        if self.schema_user is None:
-            try:
-                # noinspection PyUnresolvedReferences
-                from fake_useragent import FakeUserAgentError, UserAgent
-
-            except ImportError:
-                default_user_agent = DEFAULT_USER_AGENT
-
-            else:
-                try:
-                    loop = asyncio.get_event_loop()
-                    ua = await loop.run_in_executor(
-                        None, partial(UserAgent, fallback=DEFAULT_USER_AGENT)
-                    )
-                    default_user_agent = ua["google chrome"]
-                except FakeUserAgentError:
-                    default_user_agent = DEFAULT_USER_AGENT
-
-            schema_user = OrderedDict()
-            schema_user[vol.Required(CONF_TYPE, default=API_TYPE_DEFAULT)] = vol.In(
-                API_TYPE_NAMES
-            )
-            schema_user[vol.Required(CONF_USERNAME)] = str
-            schema_user[vol.Required(CONF_PASSWORD)] = str
-            schema_user[vol.Optional(CONF_USER_AGENT, default=default_user_agent)] = str
-            self.schema_user = vol.Schema(schema_user)
+        is_reauth = self.context.get("source") == config_entries.SOURCE_REAUTH
+        entry = None
+        if is_reauth:
+            entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
 
         if user_input is None:
+            if self.schema_user is None or is_reauth:
+                try:
+                    # noinspection PyUnresolvedReferences
+                    from fake_useragent import FakeUserAgentError, UserAgent
+
+                except ImportError:
+                    default_user_agent = DEFAULT_USER_AGENT
+
+                else:
+                    try:
+                        loop = asyncio.get_event_loop()
+                        ua = await loop.run_in_executor(
+                            None, partial(UserAgent, fallback=DEFAULT_USER_AGENT)
+                        )
+                        default_user_agent = ua["google chrome"]
+                    except (FakeUserAgentError, Exception):
+                        default_user_agent = DEFAULT_USER_AGENT
+
+                if is_reauth and entry:
+                    default_type = entry.data.get(CONF_TYPE, API_TYPE_DEFAULT)
+                    default_username = entry.data.get(CONF_USERNAME, "")
+                    default_user_agent = entry.data.get(CONF_USER_AGENT, default_user_agent)
+                else:
+                    default_type = API_TYPE_DEFAULT
+                    default_username = vol.UNDEFINED
+
+                schema_user = OrderedDict()
+                schema_user[vol.Required(CONF_TYPE, default=default_type)] = vol.In(
+                    API_TYPE_NAMES
+                )
+                schema_user[vol.Required(CONF_USERNAME, default=default_username)] = str
+                schema_user[vol.Required(CONF_PASSWORD)] = str
+                schema_user[vol.Optional(CONF_USER_AGENT, default=default_user_agent)] = str
+                self.schema_user = vol.Schema(schema_user)
+
             return self.async_show_form(step_id="user", data_schema=self.schema_user)
 
         username = user_input[CONF_USERNAME]
         type_ = user_input[CONF_TYPE]
 
-        if await self._check_entry_exists(type_, username):
-            return self.async_abort(reason="already_configured_service")
+        if not is_reauth:
+            if await self._check_entry_exists(type_, username):
+                return self.async_abort(reason="already_configured_service")
 
         try:
             api_cls = import_api_cls(type_)
@@ -177,6 +198,12 @@ class LkcomuInterRAOConfigFlow(ConfigFlow, domain=DOMAIN):
                     data_schema=self.schema_user,
                     errors={"base": "update_accounts_error"},
                 )
+
+        if is_reauth and entry:
+            self.hass.config_entries.async_update_entry(
+                entry, data={**entry.data, **user_input}
+            )
+            return self.async_abort(reason="reauth_successful")
 
         self._current_config = user_input
 
@@ -241,10 +268,16 @@ class LkcomuInterRAOConfigFlow(ConfigFlow, domain=DOMAIN):
             data={CONF_USERNAME: username, CONF_TYPE: type_},
         )
 
-    # @staticmethod
-    # @callback
-    # def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
-    #     return Inter RAOOptionsFlow(config_entry)
+    async def async_step_reauth(
+        self, user_input: Mapping[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Handle re-authentication."""
+        return await self.async_step_user(user_input)
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+        return InterRAOOptionsFlow(config_entry)
 
 
 CONF_DISABLE_ACCOUNTS = "disable_" + CONF_ACCOUNTS

@@ -94,6 +94,26 @@ SCAN_INTERVAL_SCHEMA = vol.Schema(
     }
 )
 
+ENTITY_CONF_VALIDATORS = {
+    CONF_ENTITIES: GENERIC_ACCOUNT_VALIDATOR,
+    CONF_SCAN_INTERVAL: vol.Schema(
+        {
+            vol.Optional(CONF_ACCOUNTS): cv.positive_time_period,
+            vol.Optional(CONF_LAST_INVOICE): cv.positive_time_period,
+            vol.Optional(CONF_METERS): cv.positive_time_period,
+            vol.Optional(CONF_LAST_PAYMENT): cv.positive_time_period,
+        }
+    ),
+    CONF_NAME_FORMAT: NAME_FORMAT_SCHEMA,
+}
+
+ENTITY_CODES_VALIDATORS = {
+    CONF_ACCOUNTS: cv.string,
+    CONF_LAST_INVOICE: cv.string,
+    CONF_METERS: cv.string,
+    CONF_LAST_PAYMENT: cv.string,
+}
+
 
 def _validator_name_format_schema(schema):
     return vol.Any(

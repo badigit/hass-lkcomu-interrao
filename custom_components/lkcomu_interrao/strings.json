@@ -1,5 +1,9 @@
 {
   "config": {
+    "abort": {
+      "reauth_successful": "Re-authentication was successful",
+      "already_configured_service": "Service is already configured"
+    },
     "error": {
       "authentication_error": "Authentication error! This might be due to bad credentials or server connectivity issues",
       "api_load_error": "API loading error. Please, report this to the developer as soon as possible!"

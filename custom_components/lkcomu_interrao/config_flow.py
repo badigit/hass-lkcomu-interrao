@@ -572,5 +572,4 @@ class InterRAOOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="init", data_schema=vol.Schema(schema_dict), errors=errors or None
         )
-rors or None
-        )
+

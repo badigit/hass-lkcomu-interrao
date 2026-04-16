@@ -497,7 +497,7 @@ class InterRAOOptionsFlow(OptionsFlow):
                 if CONF_USER_AGENT in user_input:
                     new_options[CONF_USER_AGENT] = user_input[CONF_USER_AGENT]
 
-                def _save_filter(config_key_: str):
+                def _save_filter(config_key_: str, validator: Any):
                     filter_key = CONF_ENTITIES + "_" + config_key_
                     blacklist_key = filter_key + "_blacklist"
 
@@ -553,7 +553,7 @@ class InterRAOOptionsFlow(OptionsFlow):
                             name_format_value
                         ).strip()
 
-                for config_key, validator in ENTITY_CODES_VALIDATORS.items():
+                for config_key, _validator in ENTITY_CODES_VALIDATORS.items():
                     _save_filter(config_key)
                     _save_scan_interval(config_key)
                     _save_name_format(config_key)

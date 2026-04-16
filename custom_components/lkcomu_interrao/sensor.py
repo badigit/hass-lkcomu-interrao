@@ -184,7 +184,7 @@ def get_supported_features(
     from_services: SupportedServicesType, for_object: Any
 ) -> int:
     features = 0
-    for type_feature, services in from_services.items():
+    for type_feature, _services in from_services.items():
         if type_feature is None:
             continue
         check_cls, feature = type_feature
@@ -782,11 +782,9 @@ class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters]):
         comment = event_data.get(ATTR_COMMENT)
 
         if comment is not None:
-            message = str(comment)
             comment = "Response comment: " + str(comment)
         else:
             comment = "Response comment not provided"
-            message = comment
 
         _LOGGER.log(
             logging.INFO if event_data.get(ATTR_SUCCESS) else logging.ERROR,
@@ -813,7 +811,7 @@ class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters]):
         indications: Mapping[str, int | float] = call_data[ATTR_INDICATIONS]
         meter_zones = self._meter.zones
 
-        for zone_id, new_value in indications.items():
+        for zone_id, _new_value in indications.items():
             if zone_id not in meter_zones:
                 raise ValueError(f"meter zone {zone_id} does not exist")
 

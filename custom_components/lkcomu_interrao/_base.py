@@ -222,7 +222,7 @@ async def async_refresh_api_data(
     accounts_config = final_config.get(CONF_ACCOUNTS) or {}
     account_default_config = final_config[CONF_DEFAULT]
 
-    for account_id, account in accounts.items():
+    for _account_id, account in accounts.items():
         account_config = accounts_config.get(account.code)
         account_log_prefix_base = (
             refresh_log_prefix + f"[{mask_username(account.code)}]"

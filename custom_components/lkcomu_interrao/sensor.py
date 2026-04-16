@@ -2,6 +2,7 @@
 Sensor for Inter RAO cabinet.
 Retrieves indications regarding current state of accounts.
 """
+
 import logging
 import re
 from datetime import date, datetime
@@ -14,23 +15,30 @@ from typing import (
     Hashable,
     Mapping,
     Optional,
+    TYPE_CHECKING,
     TypeVar,
     Union,
 )
 
+if TYPE_CHECKING:
+    from custom_components.lkcomu_interrao.coordinator import (
+        LkcomuInterRAODataUpdateCoordinator,
+    )
+
 import voluptuous as vol
-from asyncio import TimeoutError
-import aiohttp
-from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     ATTR_ENTITY_ID,
+    ATTR_SERVICE,
     CONF_DESCRIPTION,
+    # STATE_LOCKED,
     STATE_OK,
     STATE_PROBLEM,
     STATE_UNKNOWN,
 )
-from homeassistant.components.lock.const import LockState
+
+STATE_LOCKED = "locked"
+
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.util import slugify
@@ -40,12 +48,16 @@ from custom_components.lkcomu_interrao._base import (
     SupportedServicesType,
     make_common_async_setup_entry,
 )
-from custom_components.lkcomu_interrao._encoders import invoice_to_attrs, payment_to_attrs
-from custom_components.lkcomu_interrao._util import with_auto_auth
+from custom_components.lkcomu_interrao._encoders import (
+    invoice_to_attrs,
+    payment_to_attrs,
+)
+from custom_components.lkcomu_interrao._util import mask_username, with_auto_auth
 from custom_components.lkcomu_interrao.const import (
     ATTR_ACCOUNT_CODE,
     ATTR_ACCOUNT_ID,
     ATTR_ADDRESS,
+    ATTR_BENEFITS,
     ATTR_CALL_PARAMS,
     ATTR_CHARGED,
     ATTR_COMMENT,
@@ -56,13 +68,19 @@ from custom_components.lkcomu_interrao.const import (
     ATTR_IGNORE_PERIOD,
     ATTR_INCREMENTAL,
     ATTR_INDICATIONS,
+    ATTR_INITIAL,
     ATTR_INSTALL_DATE,
+    ATTR_INSURANCE,
+    ATTR_INVOICE_ID,
     ATTR_LAST_INDICATIONS_DATE,
     ATTR_LIVING_AREA,
     ATTR_METER_CATEGORY,
     ATTR_METER_CODE,
     ATTR_METER_MODEL,
     ATTR_MODEL,
+    ATTR_PAID,
+    ATTR_PENALTY,
+    ATTR_PERIOD,
     ATTR_PREVIOUS,
     ATTR_PROVIDER_NAME,
     ATTR_PROVIDER_TYPE,
@@ -78,8 +96,10 @@ from custom_components.lkcomu_interrao.const import (
     ATTR_SUBMIT_PERIOD_START,
     ATTR_SUCCESS,
     ATTR_SUM,
+    ATTR_TOTAL,
     ATTR_TOTAL_AREA,
     CONF_ACCOUNTS,
+    CONF_DEV_PRESENTATION,
     CONF_LAST_INVOICE,
     CONF_LOGOS,
     CONF_METERS,
@@ -122,6 +142,7 @@ INDICATIONS_SEQUENCE_SCHEMA = vol.All(
 )
 
 CALCULATE_PUSH_INDICATIONS_SCHEMA = vol.All(
+    cv.deprecated("notification"),
     cv.make_entity_service_schema(
         {
             vol.Required(ATTR_INDICATIONS): vol.Any(
@@ -136,6 +157,7 @@ CALCULATE_PUSH_INDICATIONS_SCHEMA = vol.All(
             vol.Optional(ATTR_IGNORE_PERIOD, default=False): cv.boolean,
             vol.Optional(ATTR_IGNORE_INDICATIONS, default=False): cv.boolean,
             vol.Optional(ATTR_INCREMENTAL, default=False): cv.boolean,
+            vol.Optional("notification", default=None): lambda x: x,
         }
     ),
 )
@@ -163,7 +185,9 @@ SERVICE_GET_INVOICES: Final = "get_invoices"
 _TLkcomuInterRAOEntity = TypeVar("_TLkcomuInterRAOEntity", bound=LkcomuInterRAOEntity)
 
 
-def get_supported_features(from_services: SupportedServicesType, for_object: Any) -> int:
+def get_supported_features(
+    from_services: SupportedServicesType, for_object: Any
+) -> int:
     features = 0
     for type_feature, services in from_services.items():
         if type_feature is None:
@@ -175,12 +199,8 @@ def get_supported_features(from_services: SupportedServicesType, for_object: Any
     return features
 
 
-class LkcomuAccount(LkcomuInterRAOEntity[Account], SensorEntity):
+class LkcomuAccount(LkcomuInterRAOEntity[Account]):
     """The class for this sensor"""
-
-    _attr_icon = "mdi:lightning-bolt-circle"
-    _attr_unit_of_measurement = "руб."
-    _attr_device_class = SensorDeviceClass.MONETARY
 
     config_key: ClassVar[str] = CONF_ACCOUNTS
 
@@ -198,8 +218,14 @@ class LkcomuAccount(LkcomuInterRAOEntity[Account], SensorEntity):
         },
     }
 
-    def __init__(self, *args, balance: Optional[AbstractBalance] = None, **kwargs) -> None:
-        super().__init__(*args, *kwargs)
+    def __init__(
+        self,
+        coordinator: "LkcomuInterRAODataUpdateCoordinator",
+        account: "Account",
+        account_config: ConfigType,
+        balance: Optional[AbstractBalance] = None,
+    ) -> None:
+        super().__init__(coordinator, account, account_config)
         self._balance = balance
 
         self.entity_id: Optional[str] = f"sensor." + slugify(
@@ -226,19 +252,37 @@ class LkcomuAccount(LkcomuInterRAOEntity[Account], SensorEntity):
         return None
 
     @property
+    def code(self) -> str:
+        return self._account.code
+
+    @property
+    def device_class(self) -> Optional[str]:
+        return DOMAIN + "_account"
+
+    @property
     def unique_id(self) -> str:
         """Return the unique ID of the sensor"""
         acc = self._account
         return f"{acc.api.__class__.__name__}_account_{acc.id}"
 
     @property
-    def native_value(self) -> Union[str, float]:
+    def state(self) -> Union[str, float]:
         if self._account.is_locked:
             return STATE_PROBLEM
         balance = self._balance
         if balance is not None:
+            if self._account_config[CONF_DEV_PRESENTATION]:
+                return ("-" if (balance.balance or 0.0) < 0.0 else "") + "#####.###"
             return round(balance.balance or 0.0, 2)  # fixes -0.0 issues
         return STATE_UNKNOWN
+
+    @property
+    def icon(self) -> str:
+        return "mdi:lightning-bolt-circle"
+
+    @property
+    def unit_of_measurement(self) -> Optional[str]:
+        return "руб."
 
     @property
     def sensor_related_attributes(self) -> Optional[Mapping[str, Any]]:
@@ -267,7 +311,7 @@ class LkcomuAccount(LkcomuInterRAOEntity[Account], SensorEntity):
         }
 
         if account.is_locked:
-            attributes[ATTR_STATUS] = LockState.LOCKED
+            attributes[ATTR_STATUS] = STATE_LOCKED
             attributes[ATTR_REASON] = account.lock_reason
 
         else:
@@ -291,17 +335,36 @@ class LkcomuAccount(LkcomuInterRAOEntity[Account], SensorEntity):
                     for zone_id, zone_def in zones.items():
                         attrs = ("name", "description", "tariff")
                         for prefix in ("", "within_"):
-                            values = tuple(getattr(zone_def, prefix + attr) for attr in attrs)
+                            values = tuple(
+                                getattr(zone_def, prefix + attr) for attr in attrs
+                            )
                             if any(values):
                                 attributes.update(
                                     zip(
-                                        map(lambda x: f"zone_{zone_id}_{prefix}{x}", attrs),
+                                        map(
+                                            lambda x: f"zone_{zone_id}_{prefix}{x}",
+                                            attrs,
+                                        ),
                                         values,
                                     )
                                 )
 
                 if isinstance(info, BytInfoSingle):
                     attributes[ATTR_METER_MODEL] = info.meter_model
+
+        self._handle_dev_presentation(
+            attributes,
+            (),
+            (
+                ATTR_DESCRIPTION,
+                ATTR_FULL_NAME,
+                ATTR_ADDRESS,
+                ATTR_LIVING_AREA,
+                ATTR_TOTAL_AREA,
+                ATTR_METER_MODEL,
+                ATTR_METER_CODE,
+            ),
+        )
 
         return attributes
 
@@ -322,6 +385,7 @@ class LkcomuAccount(LkcomuInterRAOEntity[Account], SensorEntity):
     @classmethod
     async def async_refresh_accounts(
         cls,
+        coordinator: "LkcomuInterRAODataUpdateCoordinator",
         entities: Dict[Hashable, _TLkcomuInterRAOEntity],
         account: "Account",
         config_entry: ConfigEntry,
@@ -331,7 +395,7 @@ class LkcomuAccount(LkcomuInterRAOEntity[Account], SensorEntity):
         try:
             entity = entities[entity_key]
         except KeyError:
-            entity = cls(account, account_config)
+            entity = cls(coordinator, account, account_config)
             entities[entity_key] = entity
 
             return [entity]
@@ -340,19 +404,16 @@ class LkcomuAccount(LkcomuInterRAOEntity[Account], SensorEntity):
                 entity.async_schedule_update_ha_state(force_refresh=True)
 
     async def async_update_internal(self) -> None:
-        try:
-            await self._account.async_update_related()
-            account = self._account
+        await self._account.async_update_related()
+        account = self._account
 
-            if isinstance(account, AbstractAccountWithBalance):
-                self._balance = await account.async_get_balance()
+        if isinstance(account, AbstractAccountWithBalance):
+            self._balance = await account.async_get_balance()
 
-            if isinstance(account, AccountWithBytInfo):
-                await account.async_update_info()
+        if isinstance(account, AccountWithBytInfo):
+            await account.async_update_info()
 
-            self.register_supported_services(account)
-        except (EnergosbytException, aiohttp.ClientError, TimeoutError) as e:
-            _LOGGER.warning("Error updating %s for account %s (%s): %s. Data may be stale.", self.entity_id, self._account.id, self._account.code, e)
+        self.register_supported_services(account)
 
     #################################################################################
     # Services callbacks
@@ -402,20 +463,12 @@ class LkcomuAccount(LkcomuInterRAOEntity[Account], SensorEntity):
                 event_data[ATTR_SUM] += payment.amount
                 results.append(payment_to_attrs(payment))
 
-        except (EnergosbytException, aiohttp.ClientError, TimeoutError) as e:
-            event_data[ATTR_COMMENT] = f"API or Network Error: {e!r}"
-            _LOGGER.error("%s API or Network Error during get_payments: %r", self.log_prefix, e)
-            # ATTR_SUCCESS remains False (default based on initialization)
-
-        except Exception as e:
-            event_data[ATTR_COMMENT] = f"Unexpected error: {e!r}"
-            _LOGGER.exception("%s Unexpected error during get_payments: %r", self.log_prefix, e)
-            # ATTR_SUCCESS remains False (default based on initialization)
-
+        except BaseException as e:
+            event_data[ATTR_COMMENT] = "Unknown error: %r" % e
+            _LOGGER.exception(event_data[ATTR_COMMENT])
+            raise
         else:
             event_data[ATTR_SUCCESS] = True
-            # Optionally, set a success comment:
-            # event_data[ATTR_COMMENT] = "Successfully retrieved payments"
 
         finally:
             self.hass.bus.async_fire(
@@ -462,19 +515,12 @@ class LkcomuAccount(LkcomuInterRAOEntity[Account], SensorEntity):
                 event_data[ATTR_SUM] += invoice.total
                 results.append(invoice_to_attrs(invoice))
 
-        except (EnergosbytException, aiohttp.ClientError, TimeoutError) as e:
-            event_data[ATTR_COMMENT] = f"API or Network Error: {e!r}"
-            _LOGGER.error("%s API or Network Error during get_invoices: %r", self.log_prefix, e)
-            # ATTR_SUCCESS remains False (default)
-
-        except Exception as e:
-            event_data[ATTR_COMMENT] = f"Unexpected error: {e!r}"
-            _LOGGER.exception("%s Unexpected error during get_invoices: %r", self.log_prefix, e)
-            # ATTR_SUCCESS remains False (default)
-
+        except BaseException as e:
+            event_data[ATTR_COMMENT] = "Unknown error: %r" % e
+            _LOGGER.exception(event_data[ATTR_COMMENT])
+            raise
         else:
             event_data[ATTR_SUCCESS] = True
-            # event_data[ATTR_COMMENT] = "Successfully retrieved invoices" # Optional
 
         finally:
             self.hass.bus.async_fire(
@@ -504,23 +550,18 @@ class LkcomuAccount(LkcomuInterRAOEntity[Account], SensorEntity):
                 description=event_data[ATTR_DESCRIPTION],
                 update=False,
             )
-        except EnergosbytException as e:
-            event_data[ATTR_COMMENT] = f"API Error: {e!s}"
-            _LOGGER.error("%s API Error during set_description: %s", self.log_prefix, e)
-            # ATTR_SUCCESS remains False
 
-        except (aiohttp.ClientError, TimeoutError) as e:
-            event_data[ATTR_COMMENT] = f"Network Error: {e!r}"
-            _LOGGER.error("%s Network Error during set_description: %r", self.log_prefix, e)
-            # ATTR_SUCCESS remains False
+        except EnergosbytException as e:
+            event_data[ATTR_COMMENT] = "Error: %s" % e
+            raise
 
         except Exception as e:
-            event_data[ATTR_COMMENT] = f"Unexpected error: {e!r}"
-            _LOGGER.exception("%s Unexpected error during set_description: %r", self.log_prefix, e)
-            # ATTR_SUCCESS remains False
+            event_data[ATTR_COMMENT] = "Unknown error: %s" % e
+            _LOGGER.exception("Unknown error: %s", e)
+            raise
 
         else:
-            event_data[ATTR_COMMENT] = "Successful calculation" # Keeping original comment
+            event_data[ATTR_COMMENT] = "Successful calculation"
             event_data[ATTR_SUCCESS] = True
             self.async_schedule_update_ha_state(force_refresh=True)
 
@@ -533,10 +574,8 @@ class LkcomuAccount(LkcomuInterRAOEntity[Account], SensorEntity):
             _LOGGER.info(self.log_prefix + "End handling indications calculation")
 
 
-class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters], SensorEntity):
+class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters]):
     """The class for this sensor"""
-
-    _attr_icon = "mdi:counter"
 
     config_key: ClassVar[str] = CONF_METERS
 
@@ -549,8 +588,14 @@ class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters], SensorEntity)
         },
     }
 
-    def __init__(self, *args, meter: AbstractMeter, **kwargs) -> None:
-        super().__init__(*args, *kwargs)
+    def __init__(
+        self,
+        coordinator: "LkcomuInterRAODataUpdateCoordinator",
+        account: "Account",
+        account_config: ConfigType,
+        meter: AbstractMeter,
+    ) -> None:
+        super().__init__(coordinator, account, account_config)
         self._meter = meter
 
         self.entity_id: Optional[str] = f"sensor." + slugify(
@@ -564,6 +609,7 @@ class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters], SensorEntity)
     @classmethod
     async def async_refresh_accounts(
         cls,
+        coordinator: "LkcomuInterRAODataUpdateCoordinator",
         entities: Dict[Hashable, Optional[_TLkcomuInterRAOEntity]],
         account: "Account",
         config_entry: ConfigEntry,
@@ -573,9 +619,13 @@ class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters], SensorEntity)
         if isinstance(account, AbstractAccountWithMeters):
             try:
                 meters = await account.async_get_meters()
-            except (EnergosbytException, aiohttp.ClientError, TimeoutError) as e:
-                _LOGGER.error("Error refreshing accounts (specifically, fetching details like meters) for account %s during setup/reload: %s", account.id, e)
-                meters = {}  # Return empty dict to prevent further errors
+            except ValueError as exc:
+                _LOGGER.warning(
+                    "[%s][meters] Failed to load meters due to invalid date value: %r",
+                    mask_username(account.code),
+                    exc,
+                )
+                return None
 
             for meter_id, meter in meters.items():
                 entity_key = (account.id, meter_id)
@@ -583,6 +633,7 @@ class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters], SensorEntity)
                     entity = entities[entity_key]
                 except KeyError:
                     entity = cls(
+                        coordinator,
                         account,
                         account_config,
                         meter=meter,
@@ -596,16 +647,14 @@ class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters], SensorEntity)
         return new_meter_entities if new_meter_entities else None
 
     async def async_update_internal(self) -> None:
-        try:
-            meters = await self._account.async_get_meters()
-            meter = meters.get(self._meter.id)
-            if meter is None:
-                self.hass.async_create_task(self.async_remove())
-            else:
-                self.register_supported_services(meter)
-                self._meter = meter
-        except (EnergosbytException, aiohttp.ClientError, TimeoutError) as e:
-            _LOGGER.warning("Error updating %s (meter %s) for account %s (%s): %s. Data may be stale.", self.entity_id, self._meter.id, self._account.id, self._account.code, e)
+        meters = await self._account.async_get_meters()
+        meter = meters.get(self._meter.id)
+        if meter is None:
+            self.hass.async_create_task(self.async_remove())
+        else:
+            self.register_supported_services(meter)
+
+            self._meter = meter
 
     #################################################################################
     # Data-oriented implementation of inherent class
@@ -623,15 +672,24 @@ class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters], SensorEntity)
         return f"{acc.api.__class__.__name__}_meter_{acc.id}_{met.id}"
 
     @property
-    def native_value(self) -> str:
+    def state(self) -> str:
         return self._meter.status or STATE_OK
+
+    @property
+    def icon(self):
+        return "mdi:counter"
+
+    @property
+    def device_class(self) -> Optional[str]:
+        return DOMAIN + "_meter"
 
     @property
     def supported_features(self) -> int:
         meter = self._meter
         return (
             isinstance(meter, AbstractSubmittableMeter) * FEATURE_PUSH_INDICATIONS
-            | isinstance(meter, AbstractCalculatableMeter) * FEATURE_CALCULATE_INDICATIONS
+            | isinstance(meter, AbstractCalculatableMeter)
+            * FEATURE_CALCULATE_INDICATIONS
         )
 
     @property
@@ -697,6 +755,17 @@ class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters], SensorEntity)
             for attribute, value in iterator:
                 attributes[f"zone_{zone_id}_{attribute}"] = value
 
+        self._handle_dev_presentation(
+            attributes,
+            (),
+            (
+                ATTR_METER_CODE,
+                ATTR_INSTALL_DATE,
+                ATTR_LAST_INDICATIONS_DATE,
+                *filter(lambda x: x.endswith("_indication"), attributes.keys()),
+            ),
+        )
+
         return attributes
 
     @property
@@ -724,9 +793,11 @@ class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters], SensorEntity)
         comment = event_data.get(ATTR_COMMENT)
 
         if comment is not None:
+            message = str(comment)
             comment = "Response comment: " + str(comment)
         else:
             comment = "Response comment not provided"
+            message = comment
 
         _LOGGER.log(
             logging.INFO if event_data.get(ATTR_SUCCESS) else logging.ERROR,
@@ -749,7 +820,9 @@ class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters], SensorEntity)
 
         hass.bus.async_fire(event_type=event_id, event_data=event_data)
 
-    def _get_real_indications(self, call_data: Mapping) -> Mapping[str, Union[int, float]]:
+    def _get_real_indications(
+        self, call_data: Mapping
+    ) -> Mapping[str, Union[int, float]]:
         indications: Mapping[str, Union[int, float]] = call_data[ATTR_INDICATIONS]
         meter_zones = self._meter.zones
 
@@ -788,7 +861,9 @@ class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters], SensorEntity)
         meter_code = meter.code
 
         if not isinstance(meter, AbstractSubmittableMeter):
-            raise Exception("Meter '%s' does not support indications submission" % (meter_code,))
+            raise Exception(
+                "Meter '%s' does not support indications submission" % (meter_code,)
+            )
 
         else:
             event_data = {}
@@ -805,17 +880,15 @@ class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters], SensorEntity)
                     ignore_periods=call_data[ATTR_IGNORE_PERIOD],
                     ignore_values=call_data[ATTR_IGNORE_INDICATIONS],
                 )
+
             except EnergosbytException as e:
-                event_data[ATTR_COMMENT] = f"API error: {e!s}"
-                _LOGGER.error("%s API error during push_indications: %s", self.log_prefix, e)
+                event_data[ATTR_COMMENT] = "API error: %s" % e
+                raise
 
-            except (aiohttp.ClientError, TimeoutError) as e:
-                event_data[ATTR_COMMENT] = f"Network Error: {e!r}"
-                _LOGGER.error("%s Network Error during push_indications: %r", self.log_prefix, e)
-
-            except Exception as e:
-                event_data[ATTR_COMMENT] = f"Unexpected error: {e!r}"
-                _LOGGER.exception("%s Unexpected error during push_indications: %r", self.log_prefix, e)
+            except BaseException as e:
+                event_data[ATTR_COMMENT] = "Unknown error: %r" % e
+                _LOGGER.error(event_data[ATTR_COMMENT])
+                raise
 
             else:
                 event_data[ATTR_COMMENT] = "Indications submitted successfully"
@@ -843,7 +916,9 @@ class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters], SensorEntity)
         _LOGGER.info(self.log_prefix + "Begin handling indications calculation")
 
         if not isinstance(meter, AbstractCalculatableMeter):
-            raise Exception("Meter '%s' does not support indications calculation" % (meter_code,))
+            raise Exception(
+                "Meter '%s' does not support indications calculation" % (meter_code,)
+            )
 
         event_data = {ATTR_CHARGED: None, ATTR_SUCCESS: False}
 
@@ -859,22 +934,21 @@ class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters], SensorEntity)
                 ignore_periods=call_data[ATTR_IGNORE_PERIOD],
                 ignore_values=call_data[ATTR_IGNORE_INDICATIONS],
             )
+
         except EnergosbytException as e:
-            event_data[ATTR_COMMENT] = f"API Error: {e!s}"
-            _LOGGER.error("%s API Error during calculate_indications: %s", self.log_prefix, e)
+            event_data[ATTR_COMMENT] = "Error: %s" % e
+            raise
 
-        except (aiohttp.ClientError, TimeoutError) as e:
-            event_data[ATTR_COMMENT] = f"Network Error: {e!r}"
-            _LOGGER.error("%s Network Error during calculate_indications: %r", self.log_prefix, e)
-
-        except Exception as e:
-            event_data[ATTR_COMMENT] = f"Unexpected error: {e!r}"
-            _LOGGER.exception("%s Unexpected error during calculate_indications: %r", self.log_prefix, e)
+        except BaseException as e:
+            event_data[ATTR_COMMENT] = "Unknown error: %r" % e
+            _LOGGER.exception(event_data[ATTR_COMMENT])
+            raise
 
         else:
             event_data[ATTR_CHARGED] = float(calculation)
             event_data[ATTR_COMMENT] = "Successful calculation"
             event_data[ATTR_SUCCESS] = True
+
             self.async_schedule_update_ha_state(force_refresh=True)
 
         finally:
@@ -888,20 +962,30 @@ class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters], SensorEntity)
             _LOGGER.info(self.log_prefix + "End handling indications calculation")
 
 
-class LkcomuLastInvoice(LkcomuInterRAOEntity[AbstractAccountWithInvoices], SensorEntity):
-    _attr_unit_of_measurement = "руб."
-    _attr_icon = "mdi:receipt"
-    _attr_device_class = SensorDeviceClass.MONETARY
-
+class LkcomuLastInvoice(LkcomuInterRAOEntity[AbstractAccountWithInvoices]):
     config_key = CONF_LAST_INVOICE
 
-    def __init__(self, *args, last_invoice: Optional["AbstractInvoice"] = None, **kwargs) -> None:
-        super().__init__(*args, *kwargs)
+    def __init__(
+        self,
+        coordinator: "LkcomuInterRAODataUpdateCoordinator",
+        account: "Account",
+        account_config: ConfigType,
+        last_invoice: Optional["AbstractInvoice"] = None,
+    ) -> None:
+        super().__init__(coordinator, account, account_config)
         self._last_invoice = last_invoice
 
         self.entity_id: Optional[str] = "sensor." + slugify(
             f"{self.account_provider_code or 'unknown'}_{self._account.code}_last_invoice"
         )
+
+    @property
+    def code(self) -> str:
+        return self._account.code
+
+    @property
+    def device_class(self) -> Optional[str]:
+        return DOMAIN + "_invoice"
 
     @property
     def unique_id(self) -> str:
@@ -910,17 +994,47 @@ class LkcomuLastInvoice(LkcomuInterRAOEntity[AbstractAccountWithInvoices], Senso
         return f"{acc.api.__class__.__name__}_lastinvoice_{acc.id}"
 
     @property
-    def native_value(self) -> Union[float, str]:
+    def state(self) -> Union[float, str]:
         invoice = self._last_invoice
         if invoice:
+            if self._account_config[CONF_DEV_PRESENTATION]:
+                return ("-" if (invoice.total or 0.0) < 0.0 else "") + "#####.###"
             return round(invoice.total or 0.0, 2)
         return STATE_UNKNOWN
 
     @property
+    def icon(self) -> str:
+        return "mdi:receipt"
+
+    @property
+    def unit_of_measurement(self) -> str:
+        return "руб." if self._last_invoice else None
+
+    @property
     def sensor_related_attributes(self):
         invoice = self._last_invoice
+
         if invoice:
-            return invoice_to_attrs(invoice)
+            attributes = invoice_to_attrs(invoice)
+
+            self._handle_dev_presentation(
+                attributes,
+                (ATTR_PERIOD, ATTR_INVOICE_ID),
+                (
+                    ATTR_TOTAL,
+                    ATTR_PAID,
+                    ATTR_INITIAL,
+                    ATTR_CHARGED,
+                    ATTR_INSURANCE,
+                    ATTR_BENEFITS,
+                    ATTR_PENALTY,
+                    ATTR_SERVICE,
+                ),
+            )
+
+            return attributes
+
+        return {}
 
     @property
     def name_format_values(self) -> Mapping[str, Any]:
@@ -934,18 +1048,18 @@ class LkcomuLastInvoice(LkcomuInterRAOEntity[AbstractAccountWithInvoices], Senso
     @classmethod
     async def async_refresh_accounts(
         cls,
+        coordinator: "LkcomuInterRAODataUpdateCoordinator",
         entities: Dict[Hashable, _TLkcomuInterRAOEntity],
         account: "Account",
         config_entry: ConfigEntry,
         account_config: ConfigType,
     ):
+        entity_key = account.id
         if isinstance(account, AbstractAccountWithInvoices):
-            entity_key = account.id
-
             try:
                 entity = entities[entity_key]
             except KeyError:
-                entity = cls(account, account_config)
+                entity = cls(coordinator, account, account_config)
                 entities[entity_key] = entity
                 return [entity]
             else:
@@ -955,10 +1069,7 @@ class LkcomuLastInvoice(LkcomuInterRAOEntity[AbstractAccountWithInvoices], Senso
         return None
 
     async def async_update_internal(self) -> None:
-        try:
-            self._last_invoice = await self._account.async_get_last_invoice()
-        except (EnergosbytException, aiohttp.ClientError, TimeoutError) as e:
-            _LOGGER.warning("Error updating %s for account %s: %s. Data may be stale.", self.entity_id, self._account.id, e)
+        self._last_invoice = await self._account.async_get_last_invoice()
 
 
 async_setup_entry = make_common_async_setup_entry(

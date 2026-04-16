@@ -1,4 +1,5 @@
 """Energosbyt API"""
+
 __all__ = (
     "CONFIG_SCHEMA",
     "async_unload_entry",
@@ -37,6 +38,7 @@ from custom_components.lkcomu_interrao._util import (
     import_api_cls,
     mask_username,
 )
+from custom_components.lkcomu_interrao.coordinator import LkcomuInterRAODataUpdateCoordinator
 from custom_components.lkcomu_interrao.const import (
     API_TYPE_DEFAULT,
     API_TYPE_NAMES,
@@ -46,9 +48,9 @@ from custom_components.lkcomu_interrao.const import (
     CONF_NAME_FORMAT,
     CONF_USER_AGENT,
     DATA_API_OBJECTS,
+    DATA_COORDINATOR,
     DATA_ENTITIES,
     DATA_FINAL_CONFIG,
-    DATA_PROVIDER_LOGOS,
     DATA_PROVIDER_LOGOS,
     DATA_UPDATE_DELEGATORS,
     DATA_UPDATE_LISTENERS,
@@ -76,10 +78,14 @@ def _unique_entries(value: List[Mapping[str, Any]]) -> List[Mapping[str, Any]]:
         if pair in pairs:
             if pairs[pair] is not None:
                 errors.append(
-                    vol.Invalid("duplicate unique key, first encounter", path=[pairs[pair]])
+                    vol.Invalid(
+                        "duplicate unique key, first encounter", path=[pairs[pair]]
+                    )
                 )
                 pairs[pair] = None
-            errors.append(vol.Invalid("duplicate unique key, subsequent encounter", path=[i]))
+            errors.append(
+                vol.Invalid("duplicate unique key, subsequent encounter", path=[i])
+            )
         else:
             pairs[pair] = i
 
@@ -95,7 +101,12 @@ CONFIG_SCHEMA = vol.Schema(
     {
         DOMAIN: vol.Any(
             vol.Equal({}),
-            vol.All(cv.ensure_list, vol.Length(min=1), [CONFIG_ENTRY_SCHEMA], _unique_entries),
+            vol.All(
+                cv.ensure_list,
+                vol.Length(min=1),
+                [CONFIG_ENTRY_SCHEMA],
+                _unique_entries,
+            ),
         )
     },
     extra=vol.ALLOW_EXTRA,
@@ -181,7 +192,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType):
 
     if not yaml_config:
         _LOGGER.debug(
-            "Конфигурация из YAML не обнаружена" if IS_IN_RUSSIA else "YAML configuration not found"
+            "Конфигурация из YAML не обнаружена"
+            if IS_IN_RUSSIA
+            else "YAML configuration not found"
         )
 
     return True
@@ -240,7 +253,11 @@ async def async_setup_entry(
 
     _LOGGER.info(
         log_prefix
-        + ("Применение конфигурационной записи" if IS_IN_RUSSIA else "Applying configuration entry")
+        + (
+            "Применение конфигурационной записи"
+            if IS_IN_RUSSIA
+            else "Applying configuration entry"
+        )
     )
 
     from inter_rao_energosbyt.exceptions import EnergosbytException
@@ -270,37 +287,40 @@ async def async_setup_entry(
         user_agent=user_cfg.get(CONF_USER_AGENT),
     )
 
+    # Setup coordinator
+    scan_interval = DEFAULT_SCAN_INTERVAL
+    if CONF_SCAN_INTERVAL in user_cfg:
+        if isinstance(user_cfg[CONF_SCAN_INTERVAL], timedelta):
+            scan_interval = user_cfg[CONF_SCAN_INTERVAL].total_seconds()
+        elif isinstance(user_cfg[CONF_SCAN_INTERVAL], (int, float)):
+            scan_interval = user_cfg[CONF_SCAN_INTERVAL]
+
+    coordinator = LkcomuInterRAODataUpdateCoordinator(
+        hass,
+        api_object,
+        name=f"{DOMAIN}_{type_}_{username}",
+        update_interval=timedelta(seconds=scan_interval),
+    )
+
     try:
-        try:
-            await api_object.async_authenticate()
-
-            # Fetch all accounts
-            accounts: Mapping[AccountID, "Account"] = await api_object.async_update_accounts(
-                with_related=True
-            )
-
-        except (EnergosbytException, aiohttp.ClientError, TimeoutError) as e:
-            if isinstance(e, EnergosbytException) and len(e.args) == 3:
-                error_code = e.args[1]
-                if error_code in (131, 127, 114):  # Specific auth errors
-                    _LOGGER.error(log_prefix + "Ошибка авторизации (Authentication error): " + repr(e))
-                    raise ConfigEntryAuthFailed(repr(e)) from e
-
-            _LOGGER.warning(
-                log_prefix +
-                ("Не удалось подключиться к API Мосэнергосбыт. Попытка будет повторена. Ошибка: " if IS_IN_RUSSIA else "Could not connect to Mosenergosbyt API. Will retry. Error: ") +
-                repr(e)
-            )
-            raise ConfigEntryNotReady(repr(e)) from e
-
-    except BaseException:
+        await coordinator.async_config_entry_first_refresh()
+    except ConfigEntryAuthFailed:
         await api_object.async_close()
         raise
+    except ConfigEntryNotReady:
+        await api_object.async_close()
+        raise
+    except Exception as e:
+        await api_object.async_close()
+        raise ConfigEntryNotReady(f"Error connecting to API: {e}") from e
+
+    accounts = coordinator.data
 
     if not accounts:
         # Cancel setup because no accounts provided
         _LOGGER.warning(
-            log_prefix + ("Лицевые счета не найдены" if IS_IN_RUSSIA else "No accounts found")
+            log_prefix
+            + ("Лицевые счета не найдены" if IS_IN_RUSSIA else "No accounts found")
         )
         await api_object.async_close()
         return False
@@ -316,7 +336,9 @@ async def async_setup_entry(
 
     profile_id = api_object.auth_session.id_profile
 
-    api_objects: Dict[str, "BaseEnergosbytAPI"] = hass_data.setdefault(DATA_API_OBJECTS, {})
+    api_objects: Dict[str, "BaseEnergosbytAPI"] = hass_data.setdefault(
+        DATA_API_OBJECTS, {}
+    )
     for existing_config_entry_id, existing_api_object in api_objects.items():
         if existing_api_object.auth_session.id_profile == profile_id:
             _LOGGER.warning(
@@ -331,11 +353,14 @@ async def async_setup_entry(
                     f"ID: {existing_config_entry_id})"
                 )
             )
-            await hass.config_entries.async_set_disabled_by(config_entry.entry_id, DOMAIN)
+            await hass.config_entries.async_set_disabled_by(
+                config_entry.entry_id, DOMAIN
+            )
             return False
 
     # Create placeholders
     api_objects[entry_id] = api_object
+    hass_data[DATA_COORDINATOR] = {entry_id: coordinator}
     hass_data.setdefault(DATA_ENTITIES, {})[entry_id] = {}
     hass_data.setdefault(DATA_FINAL_CONFIG, {})[entry_id] = user_cfg
     hass.data.setdefault(DATA_UPDATE_DELEGATORS, {})[entry_id] = {}
@@ -351,7 +376,8 @@ async def async_setup_entry(
     hass_data.setdefault(DATA_UPDATE_LISTENERS, {})[entry_id] = update_listener
 
     _LOGGER.debug(
-        log_prefix + ("Применение конфигурации успешно" if IS_IN_RUSSIA else "Setup successful")
+        log_prefix
+        + ("Применение конфигурации успешно" if IS_IN_RUSSIA else "Setup successful")
     )
     return True
 
@@ -364,7 +390,11 @@ async def async_reload_entry(
     log_prefix = _make_log_prefix(config_entry, "setup")
     _LOGGER.info(
         log_prefix
-        + ("Перезагрузка интеграции" if IS_IN_RUSSIA else "Reloading configuration entry")
+        + (
+            "Перезагрузка интеграции"
+            if IS_IN_RUSSIA
+            else "Reloading configuration entry"
+        )
     )
     return await hass.config_entries.async_reload(config_entry.entry_id)
 
@@ -377,7 +407,9 @@ async def async_unload_entry(
     log_prefix = _make_log_prefix(config_entry, "setup")
     entry_id = config_entry.entry_id
 
-    update_delegators: UpdateDelegatorsDataType = hass.data[DATA_UPDATE_DELEGATORS].pop(entry_id)
+    update_delegators: UpdateDelegatorsDataType = hass.data[DATA_UPDATE_DELEGATORS].pop(
+        entry_id
+    )
 
     tasks = [
         hass.config_entries.async_forward_entry_unload(config_entry, domain)
@@ -395,7 +427,11 @@ async def async_unload_entry(
 
         _LOGGER.info(
             log_prefix
-            + ("Интеграция выгружена" if IS_IN_RUSSIA else "Unloaded configuration entry")
+            + (
+                "Интеграция выгружена"
+                if IS_IN_RUSSIA
+                else "Unloaded configuration entry"
+            )
         )
 
     else:

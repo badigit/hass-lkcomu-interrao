@@ -18,6 +18,7 @@ from custom_components.lkcomu_interrao.const import (
     API_TYPE_DEFAULT,
     API_TYPE_NAMES,
     CONF_ACCOUNTS,
+    CONF_DEV_PRESENTATION,
     CONF_LAST_INVOICE,
     CONF_LAST_PAYMENT,
     CONF_LOGOS,
@@ -63,9 +64,13 @@ MIN_SCAN_INTERVAL = timedelta(seconds=60)
 NAME_FORMAT_SCHEMA = vol.Schema(
     {
         vol.Optional(CONF_ACCOUNTS, default=default_name_format_accounts): cv.string,
-        vol.Optional(CONF_LAST_INVOICE, default=default_name_format_last_invoice): cv.string,
+        vol.Optional(
+            CONF_LAST_INVOICE, default=default_name_format_last_invoice
+        ): cv.string,
         vol.Optional(CONF_METERS, default=default_name_format_meters): cv.string,
-        vol.Optional(CONF_LAST_PAYMENT, default=default_name_format_last_payment): cv.string,
+        vol.Optional(
+            CONF_LAST_PAYMENT, default=default_name_format_last_payment
+        ): cv.string,
     },
     extra=vol.PREVENT_EXTRA,
 )
@@ -73,10 +78,18 @@ NAME_FORMAT_SCHEMA = vol.Schema(
 
 SCAN_INTERVAL_SCHEMA = vol.Schema(
     {
-        vol.Optional(CONF_ACCOUNTS, default=DEFAULT_SCAN_INTERVAL): cv.positive_time_period,
-        vol.Optional(CONF_LAST_INVOICE, default=DEFAULT_SCAN_INTERVAL): cv.positive_time_period,
-        vol.Optional(CONF_METERS, default=DEFAULT_SCAN_INTERVAL): cv.positive_time_period,
-        vol.Optional(CONF_LAST_PAYMENT, default=DEFAULT_SCAN_INTERVAL): cv.positive_time_period,
+        vol.Optional(
+            CONF_ACCOUNTS, default=DEFAULT_SCAN_INTERVAL
+        ): cv.positive_time_period,
+        vol.Optional(
+            CONF_LAST_INVOICE, default=DEFAULT_SCAN_INTERVAL
+        ): cv.positive_time_period,
+        vol.Optional(
+            CONF_METERS, default=DEFAULT_SCAN_INTERVAL
+        ): cv.positive_time_period,
+        vol.Optional(
+            CONF_LAST_PAYMENT, default=DEFAULT_SCAN_INTERVAL
+        ): cv.positive_time_period,
     }
 )
 
@@ -95,15 +108,19 @@ GENERIC_ACCOUNT_SCHEMA = vol.Schema(
         vol.Optional(CONF_METERS, default=True): cv.boolean,
         vol.Optional(CONF_LAST_PAYMENT, default=True): cv.boolean,
         vol.Optional(CONF_LOGOS, default=True): cv.boolean,
+        vol.Optional(CONF_DEV_PRESENTATION, default=False): cv.boolean,
         vol.Optional(CONF_NAME_FORMAT, default=lambda: NAME_FORMAT_SCHEMA({})): vol.Any(
             vol.All(cv.string, lambda x: {CONF_ACCOUNTS: x}, NAME_FORMAT_SCHEMA),
             NAME_FORMAT_SCHEMA,
         ),
-        vol.Optional(CONF_SCAN_INTERVAL, default=lambda: SCAN_INTERVAL_SCHEMA({})): vol.Any(
+        vol.Optional(
+            CONF_SCAN_INTERVAL, default=lambda: SCAN_INTERVAL_SCHEMA({})
+        ): vol.Any(
             vol.All(
                 cv.positive_time_period,
                 lambda x: dict.fromkeys(
-                    (CONF_ACCOUNTS, CONF_LAST_INVOICE, CONF_METERS, CONF_LAST_PAYMENT), x
+                    (CONF_ACCOUNTS, CONF_LAST_INVOICE, CONF_METERS, CONF_LAST_PAYMENT),
+                    x,
                 ),
                 SCAN_INTERVAL_SCHEMA,
             ),
@@ -143,7 +160,11 @@ def _make_provider_schema(
             vol.Optional(CONF_DEFAULT, default=lambda: accounts_schema({}))
         ] = accounts_validator
         add_to_config[vol.Optional(CONF_ACCOUNTS)] = vol.Any(
-            vol.All(cv.ensure_list, [cv.string], lambda x: {y: accounts_schema({}) for y in x}),
+            vol.All(
+                cv.ensure_list,
+                [cv.string],
+                lambda x: {y: accounts_schema({}) for y in x},
+            ),
             vol.Schema({cv.string: accounts_validator}),
         )
 
@@ -159,6 +180,7 @@ GENERIC_CONFIG_ENTRY_SCHEMA = vol.Schema(
         vol.Required(CONF_TYPE): PROFILE_TYPE_VALIDATOR,
         vol.Required(CONF_USERNAME): cv.string,
         vol.Required(CONF_PASSWORD): cv.string,
+        vol.Optional(CONF_DEV_PRESENTATION, default=False): cv.boolean,
         # Additional API configuration
         vol.Optional(CONF_USER_AGENT): vol.All(
             cv.string, lambda x: " ".join(map(str.strip, x.split("\n")))
@@ -168,7 +190,9 @@ GENERIC_CONFIG_ENTRY_SCHEMA = vol.Schema(
         ): GENERIC_ACCOUNT_VALIDATOR,
         vol.Optional(CONF_ACCOUNTS): vol.Any(
             vol.All(
-                cv.ensure_list, [cv.string], lambda x: {y: GENERIC_ACCOUNT_SCHEMA({}) for y in x}
+                cv.ensure_list,
+                [cv.string],
+                lambda x: {y: GENERIC_ACCOUNT_SCHEMA({}) for y in x},
             ),
             vol.Schema({cv.string: GENERIC_ACCOUNT_VALIDATOR}),
         ),

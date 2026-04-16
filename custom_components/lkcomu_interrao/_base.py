@@ -10,6 +10,7 @@ __all__ = (
 
 import asyncio
 import logging
+import re
 from abc import abstractmethod
 from datetime import timedelta
 from typing import (
@@ -22,6 +23,7 @@ from typing import (
     Iterable,
     List,
     Mapping,
+    MutableMapping,
     Optional,
     Set,
     SupportsInt,
@@ -43,8 +45,9 @@ from homeassistant.const import (
 )
 from homeassistant.helpers import entity_platform
 from homeassistant.helpers.entity import Entity
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.event import async_track_time_interval
-from homeassistant.helpers.typing import ConfigType
+from homeassistant.helpers.typing import ConfigType, StateType
 from homeassistant.core import HomeAssistant
 from homeassistant.util import as_local, utcnow
 
@@ -60,8 +63,10 @@ from custom_components.lkcomu_interrao.const import (
     ATTR_ACCOUNT_CODE,
     ATTR_ACCOUNT_ID,
     CONF_ACCOUNTS,
+    CONF_DEV_PRESENTATION,
     CONF_NAME_FORMAT,
     DATA_API_OBJECTS,
+    DATA_COORDINATOR,
     DATA_ENTITIES,
     DATA_FINAL_CONFIG,
     DATA_PROVIDER_LOGOS,
@@ -70,6 +75,7 @@ from custom_components.lkcomu_interrao.const import (
     FORMAT_VAR_ACCOUNT_CODE,
     FORMAT_VAR_ACCOUNT_ID,
     FORMAT_VAR_CODE,
+    FORMAT_VAR_ID,
     FORMAT_VAR_PROVIDER_CODE,
     FORMAT_VAR_PROVIDER_NAME,
     SUPPORTED_PLATFORMS,
@@ -79,14 +85,19 @@ from inter_rao_energosbyt.enums import ProviderType
 if TYPE_CHECKING:
     from homeassistant.helpers.entity_registry import RegistryEntry
     from inter_rao_energosbyt.interfaces import Account, BaseEnergosbytAPI
+    from custom_components.lkcomu_interrao.coordinator import (
+        LkcomuInterRAODataUpdateCoordinator,
+    )
 
 _LOGGER = logging.getLogger(__name__)
 
 _TLkcomuInterRAOEntity = TypeVar("_TLkcomuInterRAOEntity", bound="LkcomuInterRAOEntity")
 
-AddEntitiesCallType = Callable[[List["MESEntity"], bool], Any]
-UpdateDelegatorsDataType = Dict[str, Tuple[AddEntitiesCallType, Set[Type["MESEntity"]]]]
-EntitiesDataType = Dict[Type["LkcomuInterRAOEntity"], Dict[Hashable, "LkcomuInterRAOEntity"]]
+AddEntitiesCallType = Callable[[List["LkcomuInterRAOEntity"], bool], Any]
+UpdateDelegatorsDataType = Dict[str, Tuple[AddEntitiesCallType, Set[Type["LkcomuInterRAOEntity"]]]]
+EntitiesDataType = Dict[
+    Type["LkcomuInterRAOEntity"], Dict[Hashable, "LkcomuInterRAOEntity"]
+]
 
 
 def make_common_async_setup_entry(
@@ -137,7 +148,9 @@ async def async_register_update_delegator(
 ):
     entry_id = config_entry.entry_id
 
-    update_delegators: UpdateDelegatorsDataType = hass.data[DATA_UPDATE_DELEGATORS][entry_id]
+    update_delegators: UpdateDelegatorsDataType = hass.data[DATA_UPDATE_DELEGATORS][
+        entry_id
+    ]
     update_delegators[platform] = (async_add_entities, {entity_cls, *args})
 
     if update_after_complete:
@@ -147,17 +160,24 @@ async def async_register_update_delegator(
         await async_refresh_api_data(hass, config_entry)
 
 
+DEV_CLASSES_PROCESSED = set()
+
+
 async def async_refresh_api_data(hass: HomeAssistant, config_entry: ConfigEntry):
     entry_id = config_entry.entry_id
     api: "BaseEnergosbytAPI" = hass.data[DATA_API_OBJECTS][entry_id]
 
-    accounts = await with_auto_auth(api, api.async_update_accounts, with_related=False)
+    coordinator: "LkcomuInterRAODataUpdateCoordinator" = hass.data[DATA_COORDINATOR][
+        entry_id
+    ]
 
-    update_delegators: UpdateDelegatorsDataType = hass.data[DATA_UPDATE_DELEGATORS][entry_id]
+    accounts = coordinator.data or {}
 
-    log_prefix_base = (
-        f"[{config_entry.data[CONF_TYPE]}/{mask_username(config_entry.data[CONF_USERNAME])}]"
-    )
+    update_delegators: UpdateDelegatorsDataType = hass.data[DATA_UPDATE_DELEGATORS][
+        entry_id
+    ]
+
+    log_prefix_base = f"[{config_entry.data[CONF_TYPE]}/{mask_username(config_entry.data[CONF_USERNAME])}]"
     refresh_log_prefix = log_prefix_base + "[refresh] "
 
     _LOGGER.info(
@@ -198,6 +218,19 @@ async def async_refresh_api_data(hass: HomeAssistant, config_entry: ConfigEntry)
     entities: EntitiesDataType = hass.data[DATA_ENTITIES][entry_id]
     final_config: ConfigType = dict(hass.data[DATA_FINAL_CONFIG][entry_id])
 
+    dev_presentation = final_config.get(CONF_DEV_PRESENTATION)
+    dev_log_prefix = log_prefix_base + "[dev] "
+
+    if dev_presentation:
+        from pprint import pformat
+
+        _LOGGER.debug(
+            dev_log_prefix
+            + ("Конечная конфигурация:" if IS_IN_RUSSIA else "Final configuration:")
+            + "\n"
+            + pformat(final_config)
+        )
+
     platform_tasks = {}
 
     accounts_config = final_config.get(CONF_ACCOUNTS) or {}
@@ -205,7 +238,9 @@ async def async_refresh_api_data(hass: HomeAssistant, config_entry: ConfigEntry)
 
     for account_id, account in accounts.items():
         account_config = accounts_config.get(account.code)
-        account_log_prefix_base = refresh_log_prefix + f"[{mask_username(account.code)}]"
+        account_log_prefix_base = (
+            refresh_log_prefix + f"[{mask_username(account.code)}]"
+        )
 
         if account_config is None:
             account_config = account_default_config
@@ -217,7 +252,9 @@ async def async_refresh_api_data(hass: HomeAssistant, config_entry: ConfigEntry)
             platform_log_prefix_base = account_log_prefix_base + f"[{platform}]"
             add_update_tasks = platform_tasks.setdefault(platform, [])
             for entity_cls in entity_classes:
-                cls_log_prefix_base = platform_log_prefix_base + f"[{entity_cls.__name__}]"
+                cls_log_prefix_base = (
+                    platform_log_prefix_base + f"[{entity_cls.__name__}]"
+                )
                 if account_config[entity_cls.config_key] is False:
                     _LOGGER.debug(
                         log_prefix_base
@@ -229,6 +266,24 @@ async def async_refresh_api_data(hass: HomeAssistant, config_entry: ConfigEntry)
                         )
                     )
                     continue
+
+                if dev_presentation:
+                    dev_key = (entity_cls, account.provider_type)
+                    if dev_key in DEV_CLASSES_PROCESSED:
+                        _LOGGER.debug(
+                            cls_log_prefix_base
+                            + "[dev] "
+                            + (
+                                f"Пропущен лицевой счёт ({mask_username(account.code)}) "
+                                f"по уникальности типа"
+                                if IS_IN_RUSSIA
+                                else f"Account skipped ({mask_username(account.code)}) "
+                                f"due to type uniqueness"
+                            )
+                        )
+                        continue
+
+                    DEV_CLASSES_PROCESSED.add(dev_key)
 
                 current_entities = entities.setdefault(entity_cls, {})
 
@@ -244,6 +299,7 @@ async def async_refresh_api_data(hass: HomeAssistant, config_entry: ConfigEntry)
 
                 add_update_tasks.append(
                     entity_cls.async_refresh_accounts(
+                        coordinator,
                         current_entities,
                         account,
                         config_entry,
@@ -323,19 +379,20 @@ SupportedServicesType = Mapping[
 ]
 
 
-class LkcomuInterRAOEntity(Entity, Generic[_TAccount]):
+class LkcomuInterRAOEntity(CoordinatorEntity[_TAccount], Entity, Generic[_TAccount]):
     config_key: ClassVar[str] = NotImplemented
 
     _supported_services: ClassVar[SupportedServicesType] = {}
 
     def __init__(
         self,
+        coordinator: "LkcomuInterRAODataUpdateCoordinator",
         account: _TAccount,
         account_config: ConfigType,
     ) -> None:
+        super().__init__(coordinator)
         self._account: _TAccount = account
         self._account_config: ConfigType = account_config
-        self._entity_updater = None
 
     @property
     def api_hostname(self) -> str:
@@ -347,7 +404,9 @@ class LkcomuInterRAOEntity(Entity, Generic[_TAccount]):
 
         device_info = {
             "name": f"№ {account_object.code}",
-            "identifiers": {(DOMAIN, f"{account_object.__class__.__name__}__{account_object.id}")},
+            "identifiers": {
+                (DOMAIN, f"{account_object.__class__.__name__}__{account_object.id}")
+            },
             "manufacturer": account_object.provider_name,
             "model": self.api_hostname,
             "sw_version": account_object.api.APP_VERSION,  # placeholder for future releases
@@ -358,6 +417,39 @@ class LkcomuInterRAOEntity(Entity, Generic[_TAccount]):
         #     device_info["suggested_area"] = account_address
 
         return device_info
+
+    def _handle_dev_presentation(
+        self,
+        mapping: MutableMapping[str, Any],
+        filter_vars: Iterable[str],
+        blackout_vars: Optional[Iterable[str]] = None,
+    ) -> None:
+        if self._account_config[CONF_DEV_PRESENTATION]:
+            filter_vars = set(filter_vars)
+            if blackout_vars is not None:
+                blackout_vars = set(blackout_vars)
+                filter_vars.difference_update(blackout_vars)
+
+                for attr in blackout_vars:
+                    value = mapping.get(attr)
+                    if value is not None:
+                        if isinstance(value, float):
+                            value = "#####.###"
+                        elif isinstance(value, int):
+                            value = "#####"
+                        elif isinstance(value, str):
+                            value = "XXXXX"
+                        else:
+                            value = "*****"
+                        mapping[attr] = value
+
+            for attr in filter_vars:
+                value = mapping.get(attr)
+                if value is not None:
+                    value = re.sub(r"[A-Za-z]", "X", str(value))
+                    value = re.sub(r"[0-9]", "#", value)
+                    value = re.sub(r"\w+", "*", value)
+                    mapping[attr] = value
 
     #################################################################################
     # Config getter helpers
@@ -383,14 +475,6 @@ class LkcomuInterRAOEntity(Entity, Generic[_TAccount]):
     #################################################################################
 
     @property
-    def should_poll(self) -> bool:
-        """Return True if entity has to be polled for state.
-
-        False if entity pushes its state to HA.
-        """
-        return False
-
-    @property
     def extra_state_attributes(self):
         """Return the attribute(s) of the sensor"""
 
@@ -406,6 +490,11 @@ class LkcomuInterRAOEntity(Entity, Generic[_TAccount]):
 
         if ATTR_ACCOUNT_CODE not in attributes:
             attributes[ATTR_ACCOUNT_CODE] = self._account.code
+
+        self._handle_dev_presentation(
+            attributes,
+            (ATTR_ACCOUNT_CODE, ATTR_ACCOUNT_ID),
+        )
 
         return attributes
 
@@ -426,10 +515,18 @@ class LkcomuInterRAOEntity(Entity, Generic[_TAccount]):
             name_format_values[FORMAT_VAR_ACCOUNT_ID] = str(self._account.id)
 
         if FORMAT_VAR_PROVIDER_CODE not in name_format_values:
-            name_format_values[FORMAT_VAR_PROVIDER_CODE] = self.account_provider_code or "unknown"
+            name_format_values[FORMAT_VAR_PROVIDER_CODE] = (
+                self.account_provider_code or "unknown"
+            )
 
         if FORMAT_VAR_PROVIDER_NAME not in name_format_values:
             name_format_values[FORMAT_VAR_PROVIDER_NAME] = self._account.provider_name
+
+        self._handle_dev_presentation(
+            name_format_values,
+            (FORMAT_VAR_CODE, FORMAT_VAR_ACCOUNT_CODE),
+            (FORMAT_VAR_ACCOUNT_ID, FORMAT_VAR_ID),
+        )
 
         return self.name_format.format_map(NameFormatDict(name_format_values))
 
@@ -439,17 +536,17 @@ class LkcomuInterRAOEntity(Entity, Generic[_TAccount]):
 
     async def async_added_to_hass(self) -> None:
         _LOGGER.info(self.log_prefix + "Adding to HomeAssistant")
-        self.updater_restart()
 
     async def async_will_remove_from_hass(self) -> None:
         _LOGGER.info(self.log_prefix + "Removing from HomeAssistant")
-        self.updater_stop()
 
         registry_entry: Optional["RegistryEntry"] = self.registry_entry
         if registry_entry:
             entry_id: Optional[str] = registry_entry.config_entry_id
             if entry_id:
-                data_entities: EntitiesDataType = self.hass.data[DATA_ENTITIES][entry_id]
+                data_entities: EntitiesDataType = self.hass.data[DATA_ENTITIES][
+                    entry_id
+                ]
                 cls_entities = data_entities.get(self.__class__)
                 if cls_entities:
                     remove_indices = []
@@ -467,41 +564,6 @@ class LkcomuInterRAOEntity(Entity, Generic[_TAccount]):
     def log_prefix(self) -> str:
         return f"[{self.config_key}][{self.entity_id or '<no entity ID>'}] "
 
-    def updater_stop(self) -> None:
-        if self._entity_updater is not None:
-            _LOGGER.debug(self.log_prefix + "Stopping updater")
-            self._entity_updater()
-            self._entity_updater = None
-
-    def updater_restart(self) -> None:
-        log_prefix = self.log_prefix
-        scan_interval = self.scan_interval
-
-        self.updater_stop()
-
-        async def _update_entity(*_):
-            nonlocal self
-            _LOGGER.debug(log_prefix + f"Executing updater on interval")
-            await self.async_update_ha_state(force_refresh=True)
-
-        _LOGGER.debug(
-            log_prefix + f"Starting updater "
-            f"(interval: {scan_interval.total_seconds()} seconds, "
-            f"next call: {as_local(utcnow()) + scan_interval})"
-        )
-        self._entity_updater = async_track_time_interval(
-            self.hass,
-            _update_entity,
-            scan_interval,
-        )
-
-    async def updater_execute(self) -> None:
-        self.updater_stop()
-        try:
-            await self.async_update_ha_state(force_refresh=True)
-        finally:
-            self.updater_restart()
-
     async def async_update(self) -> None:
         # @TODO: more sophisticated error handling
         await with_auto_auth(self._account.api, self.async_update_internal)
@@ -514,6 +576,7 @@ class LkcomuInterRAOEntity(Entity, Generic[_TAccount]):
     @abstractmethod
     async def async_refresh_accounts(
         cls: Type[_TLkcomuInterRAOEntity],
+        coordinator: "LkcomuInterRAODataUpdateCoordinator",
         entities: Dict[Hashable, _TLkcomuInterRAOEntity],
         account: "Account",
         config_entry: ConfigEntry,
@@ -530,8 +593,19 @@ class LkcomuInterRAOEntity(Entity, Generic[_TAccount]):
         raise NotImplementedError
 
     @property
+    @abstractmethod
     def code(self) -> str:
-        return self._account.code
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def state(self) -> StateType:
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def icon(self) -> str:
+        raise NotImplementedError
 
     @property
     @abstractmethod
@@ -546,6 +620,11 @@ class LkcomuInterRAOEntity(Entity, Generic[_TAccount]):
     @property
     @abstractmethod
     def unique_id(self) -> str:
+        raise NotImplementedError
+
+    @property
+    @abstractmethod
+    def device_class(self) -> Optional[str]:
         raise NotImplementedError
 
     def register_supported_services(self, for_object: Optional[Any] = None) -> None:

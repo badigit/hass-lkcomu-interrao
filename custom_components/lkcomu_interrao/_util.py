@@ -14,13 +14,12 @@ from typing import (
     TypeVar,
     Union,
 )
+import functools
 
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_TYPE, CONF_USERNAME
 from homeassistant.core import callback
-import functools
-
 from homeassistant.helpers.entity_platform import EntityPlatform
 from homeassistant.core import HomeAssistant
 
@@ -55,14 +54,19 @@ def _find_existing_entry(
 ) -> Optional[config_entries.ConfigEntry]:
     existing_entries = hass.config_entries.async_entries(DOMAIN)
     for config_entry in existing_entries:
-        if config_entry.data[CONF_TYPE] == type_ and config_entry.data[CONF_USERNAME] == username:
+        if (
+            config_entry.data[CONF_TYPE] == type_
+            and config_entry.data[CONF_USERNAME] == username
+        ):
             return config_entry
 
 
 async def import_api_cls(hass: HomeAssistant, type_: str) -> Type["BaseEnergosbytAPI"]:
     """Import API class by type."""
     module = await hass.async_add_executor_job(
-        functools.partial(__import__, "inter_rao_energosbyt.api." + type_, globals(), locals(), ("API",))
+        functools.partial(
+            __import__, "inter_rao_energosbyt.api." + type_, globals(), locals(), ("API",)
+        )
     )
     return module.API
 
@@ -128,7 +132,10 @@ async def async_get_icons_for_providers(
                 icons[code] = base_url + "/" + manifest[key]
 
     # Diversion for ProviderType.TKO
-    if ProviderType.TKO.name.lower() not in icons and ProviderType.MES.name.lower() in icons:
+    if (
+        ProviderType.TKO.name.lower() not in icons
+        and ProviderType.MES.name.lower() in icons
+    ):
         icons[ProviderType.TKO.name.lower()] = icons[ProviderType.MES.name.lower()]
 
     if "main.js" in manifest:
@@ -147,13 +154,18 @@ async def async_get_icons_for_providers(
 LOCAL_TIMEZONE = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
 
 # Kaliningrad is excluded as it is not supported
-IS_IN_RUSSIA = timedelta(hours=3) <= LOCAL_TIMEZONE.utcoffset(None) <= timedelta(hours=12)
+IS_IN_RUSSIA = (
+    timedelta(hours=3) <= LOCAL_TIMEZONE.utcoffset(None) <= timedelta(hours=12)
+)
 _T = TypeVar("_T")
 _RT = TypeVar("_RT")
 
 
 async def with_auto_auth(
-    api: "BaseEnergosbytAPI", async_getter: Callable[..., Coroutine[Any, Any, _RT]], *args, **kwargs
+    api: "BaseEnergosbytAPI",
+    async_getter: Callable[..., Coroutine[Any, Any, _RT]],
+    *args,
+    **kwargs,
 ) -> _RT:
     try:
         return await async_getter(*args, **kwargs)

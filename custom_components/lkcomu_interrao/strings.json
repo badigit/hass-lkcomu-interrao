@@ -1,46 +1,64 @@
 {
   "config": {
     "abort": {
-      "reauth_successful": "Re-authentication was successful",
-      "already_configured_service": "Service is already configured"
+      "reauth_successful": "Переавторизация прошла успешно",
+      "already_configured_service": "Сервис уже настроен",
+      "api_load_error": "Ошибка загрузки API. Сообщите разработчику!"
     },
     "error": {
-      "authentication_error": "Authentication error! This might be due to bad credentials or server connectivity issues",
-      "api_load_error": "API loading error. Please, report this to the developer as soon as possible!",
-      "update_accounts_error": "Error updating accounts. Please, check your connectivity and try again later."
+      "authentication_error": "Ошибка авторизации! Проверьте логин, пароль и доступность сервера.",
+      "update_accounts_error": "Ошибка обновления лицевых счетов. Проверьте подключение и попробуйте позже."
     },
     "step": {
       "user": {
         "data": {
-          "type": "Personal cabinet type",
-          "username": "Username",
-          "password": "Password",
-          "user_agent": "User-Agent header"
+          "type": "Тип личного кабинета",
+          "username": "Логин",
+          "password": "Пароль",
+          "user_agent": "User-Agent заголовок"
         },
-        "description": "Enter credentials for the chosen personal cabinet.\n\nAll accounts tied to your personal cabinet will be added.",
-        "title": "Authorization"
+        "description": "Введите учётные данные для выбранного личного кабинета.\n\nВсе лицевые счета, привязанные к кабинету, будут добавлены.",
+        "title": "Авторизация"
       },
       "select": {
         "data": {
-          "accounts": "Accounts"
+          "accounts": "Лицевые счета"
         },
-        "description": "Select accounts that you would like to be added on load, or leave empty to add all accounts automatically.",
-        "title": "Account selection"
+        "description": "Выберите счета для добавления или оставьте пустым для добавления всех.",
+        "title": "Выбор лицевых счетов"
+      },
+      "reauth_confirm": {
+        "data": {
+          "password": "Пароль",
+          "user_agent": "User-Agent заголовок"
+        },
+        "description": "Сессия истекла. Введите пароль для повторной авторизации.",
+        "title": "Переавторизация"
+      },
+      "reconfigure": {
+        "data": {
+          "type": "Тип личного кабинета",
+          "username": "Логин",
+          "password": "Пароль",
+          "user_agent": "User-Agent заголовок"
+        },
+        "description": "Измените параметры подключения к личному кабинету.",
+        "title": "Перенастройка"
       }
     }
   },
   "options": {
     "abort": {
-      "yaml_not_supported": "Changing parameters is done inside YAML configuration file"
+      "yaml_not_supported": "Изменение параметров выполняется в YAML-конфигурации"
     },
     "step": {
       "init": {
         "data": {
-          "user_agent": "User-Agent header"
+          "user_agent": "User-Agent заголовок"
         },
         "description": ""
       }
     }
   },
-  "title": "Inter RAO Personal Cabinet (Energosbyt)"
+  "title": "ЛК ЖКХ Интер РАО (Энергосбыт)"
 }

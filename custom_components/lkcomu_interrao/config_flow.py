@@ -270,7 +270,115 @@ class LkcomuInterRAOConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: Mapping[str, Any] | None = None
     ) -> dict[str, Any]:
         """Handle re-authentication."""
-        return await self.async_step_user(None)
+        return await self.async_step_reauth_confirm(None)
+
+    async def async_step_reauth_confirm(
+        self, user_input: ConfigType | None = None
+    ) -> dict[str, Any]:
+        """Handle re-authentication confirmation."""
+        entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        errors = {}
+
+        if user_input is not None and entry is not None:
+            type_ = entry.data[CONF_TYPE]
+            username = entry.data[CONF_USERNAME]
+
+            try:
+                api_cls = await import_api_cls(self.hass, type_)
+            except (ImportError, AttributeError):
+                return self.async_abort(reason="api_load_error")
+
+            async with api_cls(
+                username=username,
+                password=user_input[CONF_PASSWORD],
+                user_agent=user_input.get(CONF_USER_AGENT)
+                or entry.data.get(CONF_USER_AGENT),
+            ) as api:
+                try:
+                    await api.async_authenticate()
+                except EnergosbytException:
+                    errors["base"] = "authentication_error"
+                else:
+                    self.hass.config_entries.async_update_entry(
+                        entry,
+                        data={**entry.data, CONF_PASSWORD: user_input[CONF_PASSWORD]},
+                    )
+                    await self.hass.config_entries.async_reload(entry.entry_id)
+                    return self.async_abort(reason="reauth_successful")
+
+        default_user_agent = (
+            entry.data.get(CONF_USER_AGENT, "") if entry else ""
+        )
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_PASSWORD): str,
+                vol.Optional(CONF_USER_AGENT, default=default_user_agent): str,
+            }
+        )
+
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=schema,
+            errors=errors,
+        )
+
+    async def async_step_reconfigure(
+        self, user_input: ConfigType | None = None
+    ) -> dict[str, Any]:
+        """Handle reconfiguration."""
+        entry = self._get_reconfigure_entry()
+        errors = {}
+
+        if user_input is not None:
+            type_ = user_input.get(CONF_TYPE, entry.data[CONF_TYPE])
+            username = user_input.get(CONF_USERNAME, entry.data[CONF_USERNAME])
+
+            try:
+                api_cls = await import_api_cls(self.hass, type_)
+            except (ImportError, AttributeError):
+                return self.async_abort(reason="api_load_error")
+
+            async with api_cls(
+                username=username,
+                password=user_input[CONF_PASSWORD],
+                user_agent=user_input.get(CONF_USER_AGENT)
+                or entry.data.get(CONF_USER_AGENT),
+            ) as api:
+                try:
+                    await api.async_authenticate()
+                except EnergosbytException:
+                    errors["base"] = "authentication_error"
+                else:
+                    new_data = {
+                        **entry.data,
+                        CONF_TYPE: type_,
+                        CONF_USERNAME: username,
+                        CONF_PASSWORD: user_input[CONF_PASSWORD],
+                    }
+                    if user_input.get(CONF_USER_AGENT):
+                        new_data[CONF_USER_AGENT] = user_input[CONF_USER_AGENT]
+
+                    return self.async_create_entry(
+                        title=self.make_entry_title(api_cls, username),
+                        data=new_data,
+                    )
+
+        default_type = entry.data.get(CONF_TYPE, API_TYPE_DEFAULT)
+        default_username = entry.data.get(CONF_USERNAME, "")
+        default_user_agent = entry.data.get(CONF_USER_AGENT, "")
+
+        schema = OrderedDict()
+        schema[vol.Required(CONF_TYPE, default=default_type)] = vol.In(API_TYPE_NAMES)
+        schema[vol.Required(CONF_USERNAME, default=default_username)] = str
+        schema[vol.Required(CONF_PASSWORD)] = str
+        schema[vol.Optional(CONF_USER_AGENT, default=default_user_agent)] = str
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=vol.Schema(schema),
+            errors=errors,
+        )
 
     @staticmethod
     @callback

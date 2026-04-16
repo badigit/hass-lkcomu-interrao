@@ -48,6 +48,7 @@ from custom_components.lkcomu_interrao.const import (
     CONF_METERS,
     CONF_NAME_FORMAT,
     CONF_USER_AGENT,
+    DEFAULT_SCAN_INTERVAL,
     DOMAIN,
 )
 
@@ -436,9 +437,11 @@ class InterRAOOptionsFlow(OptionsFlow):
                 default_value = user_input[scan_interval_key]
 
             else:
-                default_value = option_scan_interval[config_key_]
+                default_value = option_scan_interval.get(config_key_)
 
-            if isinstance(default_value, timedelta):
+            if default_value is None:
+                default_value = DEFAULT_SCAN_INTERVAL
+            elif isinstance(default_value, timedelta):
                 default_value = default_value.total_seconds()
 
             default_value = {
@@ -464,7 +467,7 @@ class InterRAOOptionsFlow(OptionsFlow):
             name_format_value = user_input.get(name_format_key)
 
             if name_format_value is None:
-                name_format_value = option_name_format[config_key_]
+                name_format_value = option_name_format.get(config_key_, "")
 
             schema_dict[vol.Optional(name_format_key, default=name_format_value)] = (
                 cv.string

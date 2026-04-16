@@ -17,11 +17,6 @@ from typing import (
     TypeVar,
 )
 
-if TYPE_CHECKING:
-    from custom_components.lkcomu_interrao.coordinator import (
-        LkcomuInterRAODataUpdateCoordinator,
-    )
-
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
@@ -33,9 +28,6 @@ from homeassistant.const import (
     STATE_PROBLEM,
     STATE_UNKNOWN,
 )
-
-STATE_LOCKED = "locked"
-
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.util import slugify
@@ -121,6 +113,13 @@ from custom_components.lkcomu_interrao.const import (
     FORMAT_VAR_TYPE_EN,
     FORMAT_VAR_TYPE_RU,
 )
+
+if TYPE_CHECKING:
+    from custom_components.lkcomu_interrao.coordinator import (
+        LkcomuInterRAODataUpdateCoordinator,
+    )
+
+STATE_LOCKED = "locked"
 
 _LOGGER = logging.getLogger(__name__)
 

@@ -7,6 +7,7 @@ from typing import Any
 import voluptuous as vol
 from homeassistant.const import (
     CONF_DEFAULT,
+    CONF_ENTITIES,
     CONF_PASSWORD,
     CONF_SCAN_INTERVAL,
     CONF_TYPE,
@@ -142,26 +143,6 @@ def _make_account_validator(account_schema):
 
 GENERIC_ACCOUNT_VALIDATOR = _make_account_validator(GENERIC_ACCOUNT_SCHEMA)
 
-ENTITY_CONF_VALIDATORS = {
-    CONF_ENTITIES: GENERIC_ACCOUNT_VALIDATOR,
-    CONF_SCAN_INTERVAL: vol.Schema(
-        {
-            vol.Optional(CONF_ACCOUNTS): cv.positive_time_period,
-            vol.Optional(CONF_LAST_INVOICE): cv.positive_time_period,
-            vol.Optional(CONF_METERS): cv.positive_time_period,
-            vol.Optional(CONF_LAST_PAYMENT): cv.positive_time_period,
-        }
-    ),
-    CONF_NAME_FORMAT: NAME_FORMAT_SCHEMA,
-}
-
-ENTITY_CODES_VALIDATORS = {
-    CONF_ACCOUNTS: cv.string,
-    CONF_LAST_INVOICE: cv.string,
-    CONF_METERS: cv.string,
-    CONF_LAST_PAYMENT: cv.string,
-}
-
 
 def _make_provider_schema(
     provider_type: str,
@@ -220,6 +201,26 @@ GENERIC_CONFIG_ENTRY_SCHEMA = vol.Schema(
     },
     extra=vol.PREVENT_EXTRA,
 )
+
+ENTITY_CONF_VALIDATORS = {
+    CONF_ENTITIES: GENERIC_ACCOUNT_VALIDATOR,
+    CONF_SCAN_INTERVAL: vol.Schema(
+        {
+            vol.Optional(CONF_ACCOUNTS): cv.positive_time_period,
+            vol.Optional(CONF_LAST_INVOICE): cv.positive_time_period,
+            vol.Optional(CONF_METERS): cv.positive_time_period,
+            vol.Optional(CONF_LAST_PAYMENT): cv.positive_time_period,
+        }
+    ),
+    CONF_NAME_FORMAT: NAME_FORMAT_SCHEMA,
+}
+
+ENTITY_CODES_VALIDATORS = {
+    CONF_ACCOUNTS: cv.string,
+    CONF_LAST_INVOICE: cv.string,
+    CONF_METERS: cv.string,
+    CONF_LAST_PAYMENT: cv.string,
+}
 
 _CONFIG_VALIDATORS = [
     _make_provider_schema(

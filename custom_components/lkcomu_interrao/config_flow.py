@@ -24,6 +24,7 @@ from homeassistant.const import (
     CONF_TYPE,
     CONF_USERNAME,
 )
+from homeassistant.core import callback
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 from inter_rao_energosbyt.const import DEFAULT_USER_AGENT
@@ -35,12 +36,11 @@ from inter_rao_energosbyt.interfaces import (
     BaseEnergosbytAPI,
 )
 
-from custom_components.lkcomu_interrao._util import import_api_cls
 from custom_components.lkcomu_interrao._schema import (
-    CONFIG_ENTRY_SCHEMA,
     ENTITY_CODES_VALIDATORS,
     ENTITY_CONF_VALIDATORS,
 )
+from custom_components.lkcomu_interrao._util import import_api_cls
 from custom_components.lkcomu_interrao.const import (
     API_TYPE_DEFAULT,
     API_TYPE_NAMES,
@@ -53,8 +53,6 @@ from custom_components.lkcomu_interrao.const import (
     DATA_ENTITIES,
     DOMAIN,
 )
-
-from homeassistant.core import callback
 
 if TYPE_CHECKING:
     from custom_components.lkcomu_interrao._base import LkcomuInterRAOEntity
@@ -143,7 +141,9 @@ class LkcomuInterRAOConfigFlow(ConfigFlow, domain=DOMAIN):
                 if is_reauth and entry:
                     default_type = entry.data.get(CONF_TYPE, API_TYPE_DEFAULT)
                     default_username = entry.data.get(CONF_USERNAME, "")
-                    default_user_agent = entry.data.get(CONF_USER_AGENT, default_user_agent)
+                    default_user_agent = entry.data.get(
+                        CONF_USER_AGENT, default_user_agent
+                    )
                 else:
                     default_type = API_TYPE_DEFAULT
                     default_username = vol.UNDEFINED
@@ -154,7 +154,9 @@ class LkcomuInterRAOConfigFlow(ConfigFlow, domain=DOMAIN):
                 )
                 schema_user[vol.Required(CONF_USERNAME, default=default_username)] = str
                 schema_user[vol.Required(CONF_PASSWORD)] = str
-                schema_user[vol.Optional(CONF_USER_AGENT, default=default_user_agent)] = str
+                schema_user[
+                    vol.Optional(CONF_USER_AGENT, default=default_user_agent)
+                ] = str
                 self.schema_user = vol.Schema(schema_user)
 
             return self.async_show_form(step_id="user", data_schema=self.schema_user)

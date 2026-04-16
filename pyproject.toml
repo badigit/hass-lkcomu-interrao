@@ -1,11 +1,19 @@
-[tool.black]
+[tool.ruff]
 line-length = 88
-target-version = ['py311', 'py312']
-include = '\.pyi?$'
-extend-exclude = '''
-/(
-  | hass
-  | interface
-  | images
-)/
-'''
+target-version = "py312"
+
+[tool.ruff.lint]
+# Включаем базовые правила:
+# E/W - ошибки и предупреждения pycodestyle
+# F - ошибки логики (Undefined names, unused imports)
+# I - сортировка импортов
+# B - поиск частых багов
+# UP - проверка на современный синтаксис (pyupgrade)
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = []
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"

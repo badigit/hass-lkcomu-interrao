@@ -359,7 +359,8 @@ class LkcomuInterRAOConfigFlow(ConfigFlow, domain=DOMAIN):
                     if user_input.get(CONF_USER_AGENT):
                         new_data[CONF_USER_AGENT] = user_input[CONF_USER_AGENT]
 
-                    return self.async_create_entry(
+                    return self.async_update_reload_and_abort(
+                        entry,
                         title=self.make_entry_title(api_cls, username),
                         data=new_data,
                     )

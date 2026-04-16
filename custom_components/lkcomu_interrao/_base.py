@@ -51,8 +51,15 @@ from custom_components.lkcomu_interrao.const import (
     ATTRIBUTION_RU,
     CONF_ACCOUNTS,
     CONF_DEV_PRESENTATION,
+    CONF_LAST_INVOICE,
+    CONF_LAST_PAYMENT,
+    CONF_METERS,
     CONF_NAME_FORMAT,
     DATA_PROVIDER_LOGOS,
+    DEFAULT_NAME_FORMAT_RU_ACCOUNTS,
+    DEFAULT_NAME_FORMAT_RU_LAST_INVOICE,
+    DEFAULT_NAME_FORMAT_RU_LAST_PAYMENT,
+    DEFAULT_NAME_FORMAT_RU_METERS,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     FORMAT_VAR_ACCOUNT_CODE,
@@ -455,12 +462,20 @@ class LkcomuInterRAOEntity(CoordinatorEntity[_TAccount], Generic[_TAccount]):
             return scan_cfg.get(self.config_key, timedelta(seconds=DEFAULT_SCAN_INTERVAL))
         return timedelta(seconds=DEFAULT_SCAN_INTERVAL)
 
+    _DEFAULT_NAME_FORMATS: dict[str, str] = {
+        CONF_ACCOUNTS: DEFAULT_NAME_FORMAT_RU_ACCOUNTS,
+        CONF_METERS: DEFAULT_NAME_FORMAT_RU_METERS,
+        CONF_LAST_INVOICE: DEFAULT_NAME_FORMAT_RU_LAST_INVOICE,
+        CONF_LAST_PAYMENT: DEFAULT_NAME_FORMAT_RU_LAST_PAYMENT,
+    }
+
     @property
     def name_format(self) -> str:
+        default = self._DEFAULT_NAME_FORMATS.get(self.config_key, "")
         name_cfg = self._account_config.get(CONF_NAME_FORMAT)
         if isinstance(name_cfg, dict):
-            return name_cfg.get(self.config_key, "")
-        return ""
+            return name_cfg.get(self.config_key, default)
+        return default
 
     #################################################################################
     # Base overrides

@@ -4,8 +4,9 @@ import logging
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from inter_rao_energosbyt.exceptions import EnergosbytException
+from inter_rao_energosbyt.exceptions import EnergosbytException, ResponseCodeError
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
@@ -31,10 +32,13 @@ class LkcomuInterRAODataUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> dict["AccountID", "Account"]:
         """Update data via library."""
         try:
-            # We fetch accounts and their details
-            # If the library's async_update_accounts is truly async, this is fine.
-            # If not, we already wrap it in with_auto_auth which might handle it.
             return await self.api.async_update_accounts(with_related=True)
+        except ResponseCodeError as error:
+            if int(error) == 201:
+                raise ConfigEntryAuthFailed(
+                    "Session expired, re-authentication required"
+                ) from error
+            raise UpdateFailed(f"Error communicating with API: {error}") from error
         except EnergosbytException as error:
             raise UpdateFailed(f"Error communicating with API: {error}") from error
         except Exception as error:

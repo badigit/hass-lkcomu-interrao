@@ -53,6 +53,7 @@ from custom_components.lkcomu_interrao.const import (
     CONF_DEV_PRESENTATION,
     CONF_NAME_FORMAT,
     DATA_PROVIDER_LOGOS,
+    DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     FORMAT_VAR_ACCOUNT_CODE,
     FORMAT_VAR_ACCOUNT_ID,
@@ -234,6 +235,11 @@ async def async_refresh_api_data(
         if account_config is False:
             continue
 
+        # Config entry data may store True instead of a full config dict;
+        # treat True as "all entities enabled with defaults"
+        if account_config is True:
+            account_config = {}
+
         for platform, (_, entity_classes) in update_delegators.items():
             platform_log_prefix_base = account_log_prefix_base + f"[{platform}]"
             add_update_tasks = platform_tasks.setdefault(platform, [])
@@ -241,7 +247,7 @@ async def async_refresh_api_data(
                 cls_log_prefix_base = (
                     platform_log_prefix_base + f"[{entity_cls.__name__}]"
                 )
-                if account_config[entity_cls.config_key] is False:
+                if account_config.get(entity_cls.config_key) is False:
                     _LOGGER.debug(
                         log_prefix_base
                         + " "
@@ -404,7 +410,7 @@ class LkcomuInterRAOEntity(CoordinatorEntity[_TAccount], Generic[_TAccount]):
         filter_vars: Iterable[str],
         blackout_vars: Iterable[str] | None = None,
     ) -> None:
-        if self._account_config[CONF_DEV_PRESENTATION]:
+        if self._account_config.get(CONF_DEV_PRESENTATION):
             filter_vars = set(filter_vars)
             if blackout_vars is not None:
                 blackout_vars = set(blackout_vars)
@@ -444,11 +450,17 @@ class LkcomuInterRAOEntity(CoordinatorEntity[_TAccount], Generic[_TAccount]):
 
     @property
     def scan_interval(self) -> timedelta:
-        return self._account_config[CONF_SCAN_INTERVAL][self.config_key]
+        scan_cfg = self._account_config.get(CONF_SCAN_INTERVAL)
+        if isinstance(scan_cfg, dict):
+            return scan_cfg.get(self.config_key, timedelta(seconds=DEFAULT_SCAN_INTERVAL))
+        return timedelta(seconds=DEFAULT_SCAN_INTERVAL)
 
     @property
     def name_format(self) -> str:
-        return self._account_config[CONF_NAME_FORMAT][self.config_key]
+        name_cfg = self._account_config.get(CONF_NAME_FORMAT)
+        if isinstance(name_cfg, dict):
+            return name_cfg.get(self.config_key, "")
+        return ""
 
     #################################################################################
     # Base overrides
@@ -575,9 +587,8 @@ class LkcomuInterRAOEntity(CoordinatorEntity[_TAccount], Generic[_TAccount]):
         raise NotImplementedError
 
     @property
-    @abstractmethod
     def state(self) -> StateType:
-        raise NotImplementedError
+        return None
 
     @property
     @abstractmethod

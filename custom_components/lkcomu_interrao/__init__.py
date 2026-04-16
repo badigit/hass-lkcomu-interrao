@@ -12,6 +12,7 @@ __all__ = (
     "DOMAIN",
 )
 
+import asyncio
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -54,6 +55,8 @@ from custom_components.lkcomu_interrao.const import (
 from custom_components.lkcomu_interrao.coordinator import (
     LkcomuInterRAODataUpdateCoordinator,
 )
+
+from inter_rao_energosbyt.exceptions import EnergosbytException
 
 if TYPE_CHECKING:
     from inter_rao_energosbyt.interfaces import BaseEnergosbytAPI
@@ -239,21 +242,21 @@ async def async_setup_entry(
         user_cfg = yaml_config[unique_key]
 
     else:
-        # Validate entry data through config schema (credentials + account structure)
-        try:
-            user_cfg = CONFIG_ENTRY_SCHEMA({**config_entry.data})
-        except vol.Invalid as e:
+        # Config entry data was already validated by config flow;
+        # only check required fields are present
+        entry_data = dict(config_entry.data)
+        if not all(k in entry_data for k in (CONF_TYPE, CONF_USERNAME, CONF_PASSWORD)):
             _LOGGER.error(
                 log_prefix
                 + (
-                    "Сохранённая конфигурация повреждена"
+                    "Сохранённая конфигурация повреждена: отсутствуют обязательные поля"
                     if is_in_russia(hass)
-                    else "Configuration invalid"
+                    else "Configuration invalid: missing required fields"
                 )
-                + ": "
-                + repr(e)
             )
             return False
+
+        user_cfg = entry_data
 
         # Apply options overrides (user_agent from options takes precedence)
         if config_entry.options:
@@ -293,6 +296,41 @@ async def async_setup_entry(
         password=user_cfg[CONF_PASSWORD],
         user_agent=user_cfg.get(CONF_USER_AGENT),
     )
+
+    # Authenticate before first data fetch
+    try:
+        auth_task = asyncio.ensure_future(api_object.async_authenticate())
+        done, _ = await asyncio.wait({auth_task}, timeout=60)
+        if not done:
+            auth_task.cancel()
+            await api_object.async_close()
+            raise ConfigEntryNotReady("Authentication timed out after 60s")
+        auth_task.result()
+    except (ConfigEntryNotReady, ConfigEntryAuthFailed):
+        raise
+    except (TimeoutError, OSError, asyncio.TimeoutError) as e:
+        await api_object.async_close()
+        raise ConfigEntryNotReady(
+            f"Connection error: {e}"
+        ) from e
+    except EnergosbytException as e:
+        await api_object.async_close()
+        _LOGGER.error(
+            log_prefix
+            + (
+                f"Ошибка авторизации: {e}"
+                if is_in_russia(hass)
+                else f"Authentication failed: {e}"
+            )
+        )
+        raise ConfigEntryAuthFailed(
+            f"Authentication failed: {e}"
+        ) from e
+    except Exception as e:
+        await api_object.async_close()
+        raise ConfigEntryNotReady(
+            f"Unexpected error during authentication: {e}"
+        ) from e
 
     # Setup coordinator
     scan_interval = DEFAULT_SCAN_INTERVAL

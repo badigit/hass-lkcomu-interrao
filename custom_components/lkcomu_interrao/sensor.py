@@ -228,7 +228,7 @@ class LkcomuAccount(LkcomuInterRAOEntity[Account]):
 
     @property
     def entity_picture(self) -> str | None:
-        if not self._account_config[CONF_LOGOS]:
+        if not self._account_config.get(CONF_LOGOS, True):
             return None
 
         account_provider_code = self.account_provider_code
@@ -259,7 +259,7 @@ class LkcomuAccount(LkcomuInterRAOEntity[Account]):
             return STATE_PROBLEM
         balance = self._balance
         if balance is not None:
-            if self._account_config[CONF_DEV_PRESENTATION]:
+            if self._account_config.get(CONF_DEV_PRESENTATION):
                 return ("-" if (balance.balance or 0.0) < 0.0 else "") + "#####.###"
             return round(balance.balance or 0.0, 2)  # fixes -0.0 issues
         return STATE_UNKNOWN
@@ -981,7 +981,7 @@ class LkcomuLastInvoice(LkcomuInterRAOEntity[AbstractAccountWithInvoices]):
     def native_value(self) -> float | str:
         invoice = self._last_invoice
         if invoice:
-            if self._account_config[CONF_DEV_PRESENTATION]:
+            if self._account_config.get(CONF_DEV_PRESENTATION):
                 return ("-" if (invoice.total or 0.0) < 0.0 else "") + "#####.###"
             return round(invoice.total or 0.0, 2)
         return STATE_UNKNOWN

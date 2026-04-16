@@ -12,7 +12,6 @@ __all__ = (
     "DOMAIN",
 )
 
-import asyncio
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -48,7 +47,6 @@ from custom_components.lkcomu_interrao._util import (
 )
 from custom_components.lkcomu_interrao.const import (
     CONF_USER_AGENT,
-    DATA_PROVIDER_LOGOS,
     DATA_YAML_CONFIG,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
@@ -330,7 +328,11 @@ async def async_setup_entry(
         # Cancel setup because no accounts provided
         _LOGGER.warning(
             log_prefix
-            + ("Лицевые счета не найдены" if is_in_russia(hass) else "No accounts found")
+            + (
+                "Лицевые счета не найдены"
+                if is_in_russia(hass)
+                else "No accounts found"
+            )
         )
         await api_object.async_close()
         return False
@@ -365,7 +367,11 @@ async def async_setup_entry(
 
     _LOGGER.debug(
         log_prefix
-        + ("Применение конфигурации успешно" if is_in_russia(hass) else "Setup successful")
+        + (
+            "Применение конфигурации успешно"
+            if is_in_russia(hass)
+            else "Setup successful"
+        )
     )
     return True
 

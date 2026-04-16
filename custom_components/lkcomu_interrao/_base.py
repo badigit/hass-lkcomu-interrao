@@ -64,7 +64,6 @@ from custom_components.lkcomu_interrao.const import (
 )
 
 if TYPE_CHECKING:
-    from homeassistant.helpers.entity_registry import RegistryEntry
     from inter_rao_energosbyt.interfaces import Account, BaseEnergosbytAPI
 
     from custom_components.lkcomu_interrao.__init__ import LkcomuInterRAOConfigEntry
@@ -131,7 +130,9 @@ async def async_register_update_delegator(
     *args: type["LkcomuInterRAOEntity"],
     update_after_complete: bool = True,
 ):
-    update_delegators: UpdateDelegatorsDataType = config_entry.runtime_data.update_delegators
+    update_delegators: UpdateDelegatorsDataType = (
+        config_entry.runtime_data.update_delegators
+    )
     update_delegators[platform] = (async_add_entities, {entity_cls, *args})
 
     if update_after_complete:
@@ -141,14 +142,20 @@ async def async_register_update_delegator(
         await async_refresh_api_data(hass, config_entry)
 
 
-async def async_refresh_api_data(hass: HomeAssistant, config_entry: "LkcomuInterRAOConfigEntry"):
+async def async_refresh_api_data(
+    hass: HomeAssistant, config_entry: "LkcomuInterRAOConfigEntry"
+):
     api: BaseEnergosbytAPI = config_entry.runtime_data.api
 
-    coordinator: LkcomuInterRAODataUpdateCoordinator = config_entry.runtime_data.coordinator
+    coordinator: LkcomuInterRAODataUpdateCoordinator = (
+        config_entry.runtime_data.coordinator
+    )
 
     accounts = coordinator.data or {}
 
-    update_delegators: UpdateDelegatorsDataType = config_entry.runtime_data.update_delegators
+    update_delegators: UpdateDelegatorsDataType = (
+        config_entry.runtime_data.update_delegators
+    )
 
     log_prefix_base = f"[{config_entry.data[CONF_TYPE]}/{mask_username(config_entry.data[CONF_USERNAME])}]"
     refresh_log_prefix = log_prefix_base + "[refresh] "

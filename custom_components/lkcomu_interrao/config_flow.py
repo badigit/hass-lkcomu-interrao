@@ -53,7 +53,6 @@ from custom_components.lkcomu_interrao.const import (
 )
 
 if TYPE_CHECKING:
-    from custom_components.lkcomu_interrao.__init__ import LkcomuInterRAOConfigEntry
     from custom_components.lkcomu_interrao._base import LkcomuInterRAOEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -277,7 +276,7 @@ class LkcomuInterRAOConfigFlow(ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
-        return InterRAOOptionsFlow(config_entry)
+        return InterRAOOptionsFlow()
 
 
 CONF_DISABLE_ACCOUNTS = "disable_" + CONF_ACCOUNTS
@@ -289,8 +288,7 @@ CONF_USE_TEXT_FIELDS = "use_text_fields"
 class InterRAOOptionsFlow(OptionsFlow):
     """Handler for Inter RAO options"""
 
-    def __init__(self, config_entry: "LkcomuInterRAOConfigEntry"):
-        self.config_entry = config_entry
+    def __init__(self):
         self.use_text_fields = False
         self.config_codes: dict[str, list[str]] | None = None
 
@@ -572,4 +570,3 @@ class InterRAOOptionsFlow(OptionsFlow):
         return self.async_show_form(
             step_id="init", data_schema=vol.Schema(schema_dict), errors=errors or None
         )
-

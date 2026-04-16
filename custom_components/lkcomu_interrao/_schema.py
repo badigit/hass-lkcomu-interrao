@@ -14,7 +14,6 @@ from homeassistant.const import (
 )
 from homeassistant.helpers import config_validation as cv
 
-from custom_components.lkcomu_interrao._util import is_in_russia
 from custom_components.lkcomu_interrao.const import (
     API_TYPE_DEFAULT,
     API_TYPE_NAMES,
@@ -33,6 +32,7 @@ from custom_components.lkcomu_interrao.const import (
     DEFAULT_NAME_FORMAT_RU_METERS,
     DEFAULT_SCAN_INTERVAL,
 )
+
 MIN_SCAN_INTERVAL = timedelta(seconds=60)
 
 

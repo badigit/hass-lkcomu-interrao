@@ -107,7 +107,6 @@ from custom_components.lkcomu_interrao.const import (
     CONF_LAST_INVOICE,
     CONF_LOGOS,
     CONF_METERS,
-    DATA_PROVIDER_LOGOS,
     DOMAIN,
     FORMAT_VAR_ID,
     FORMAT_VAR_TYPE_EN,

@@ -1,9 +1,7 @@
 import asyncio
-import datetime
 import functools
 import re
 from collections.abc import Callable, Coroutine
-from datetime import timedelta
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -171,6 +169,8 @@ def is_in_russia(hass: HomeAssistant) -> bool:
         return True
 
     return False
+
+
 _T = TypeVar("_T")
 _RT = TypeVar("_RT")
 

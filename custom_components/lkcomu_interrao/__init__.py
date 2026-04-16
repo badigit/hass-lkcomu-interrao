@@ -135,7 +135,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType):
     hass.data[DOMAIN] = domain_data
 
     yaml_config = {}
-    hass.data[DATA_YAML_CONFIG] = yaml_config
+    domain_data[DATA_YAML_CONFIG] = yaml_config
 
     for user_cfg in domain_config:
         if not user_cfg:
@@ -224,7 +224,8 @@ async def async_setup_entry(
     # Source full configuration
     if config_entry.source == config_entries.SOURCE_IMPORT:
         # Source configuration from YAML
-        yaml_config = hass.data.get(DATA_YAML_CONFIG)
+        domain_data = hass.data.get(DOMAIN) or {}
+        yaml_config = domain_data.get(DATA_YAML_CONFIG)
 
         if not yaml_config or unique_key not in yaml_config:
             _LOGGER.info(

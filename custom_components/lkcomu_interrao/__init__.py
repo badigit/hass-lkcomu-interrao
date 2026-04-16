@@ -16,9 +16,7 @@ import asyncio
 from datetime import timedelta
 import logging
 from typing import Any, Dict, List, Mapping, Optional, TYPE_CHECKING, Tuple
-from asyncio import TimeoutError
 
-import aiohttp
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.components.binary_sensor import DOMAIN as BINARY_SENSOR_DOMAIN
@@ -35,7 +33,6 @@ from custom_components.lkcomu_interrao._util import (
     IS_IN_RUSSIA,
     _find_existing_entry,
     _make_log_prefix,
-    async_get_icons_for_providers,
     import_api_cls,
     mask_username,
 )
@@ -43,31 +40,20 @@ from custom_components.lkcomu_interrao.coordinator import (
     LkcomuInterRAODataUpdateCoordinator,
 )
 from custom_components.lkcomu_interrao.const import (
-    API_TYPE_DEFAULT,
-    API_TYPE_NAMES,
-    CONF_ACCOUNTS,
-    CONF_LAST_INVOICE,
-    CONF_METERS,
-    CONF_NAME_FORMAT,
     CONF_USER_AGENT,
     DATA_API_OBJECTS,
     DATA_COORDINATOR,
     DATA_ENTITIES,
     DATA_FINAL_CONFIG,
-    DATA_PROVIDER_LOGOS,
     DATA_UPDATE_DELEGATORS,
     DATA_UPDATE_LISTENERS,
     DATA_YAML_CONFIG,
-    DEFAULT_NAME_FORMAT_EN_ACCOUNTS,
-    DEFAULT_NAME_FORMAT_EN_LAST_INVOICE,
-    DEFAULT_NAME_FORMAT_EN_METERS,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
 )
 
 if TYPE_CHECKING:
-    from inter_rao_energosbyt.interfaces import Account, AccountID, BaseEnergosbytAPI
-    from custom_components.lkcomu_interrao.sensor import LkcomuAccount
+    from inter_rao_energosbyt.interfaces import BaseEnergosbytAPI
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -262,8 +248,6 @@ async def async_setup_entry(
             else "Applying configuration entry"
         )
     )
-
-    from inter_rao_energosbyt.exceptions import EnergosbytException
 
     try:
         api_cls = await import_api_cls(hass, type_)

@@ -46,10 +46,8 @@ from homeassistant.const import (
 from homeassistant.helpers import entity_platform
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.typing import ConfigType, StateType
 from homeassistant.core import HomeAssistant
-from homeassistant.util import as_local, utcnow
 
 from custom_components.lkcomu_interrao._util import (
     IS_IN_RUSSIA,

@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class LkcomuInterRAODataUpdateCoordinator(DataUpdateCoordinator):
     """Class to manage fetching data from Inter RAO API."""
 

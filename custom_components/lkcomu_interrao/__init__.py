@@ -38,7 +38,9 @@ from custom_components.lkcomu_interrao._util import (
     import_api_cls,
     mask_username,
 )
-from custom_components.lkcomu_interrao.coordinator import LkcomuInterRAODataUpdateCoordinator
+from custom_components.lkcomu_interrao.coordinator import (
+    LkcomuInterRAODataUpdateCoordinator,
+)
 from custom_components.lkcomu_interrao.const import (
     API_TYPE_DEFAULT,
     API_TYPE_NAMES,

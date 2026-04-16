@@ -65,7 +65,11 @@ async def import_api_cls(hass: HomeAssistant, type_: str) -> Type["BaseEnergosby
     """Import API class by type."""
     module = await hass.async_add_executor_job(
         functools.partial(
-            __import__, "inter_rao_energosbyt.api." + type_, globals(), locals(), ("API",)
+            __import__,
+            "inter_rao_energosbyt.api." + type_,
+            globals(),
+            locals(),
+            ("API",),
         )
     )
     return module.API

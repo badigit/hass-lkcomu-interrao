@@ -94,7 +94,9 @@ _LOGGER = logging.getLogger(__name__)
 _TLkcomuInterRAOEntity = TypeVar("_TLkcomuInterRAOEntity", bound="LkcomuInterRAOEntity")
 
 AddEntitiesCallType = Callable[[List["LkcomuInterRAOEntity"], bool], Any]
-UpdateDelegatorsDataType = Dict[str, Tuple[AddEntitiesCallType, Set[Type["LkcomuInterRAOEntity"]]]]
+UpdateDelegatorsDataType = Dict[
+    str, Tuple[AddEntitiesCallType, Set[Type["LkcomuInterRAOEntity"]]]
+]
 EntitiesDataType = Dict[
     Type["LkcomuInterRAOEntity"], Dict[Hashable, "LkcomuInterRAOEntity"]
 ]

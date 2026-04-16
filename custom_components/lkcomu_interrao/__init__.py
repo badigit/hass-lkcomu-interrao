@@ -13,6 +13,7 @@ __all__ = (
 )
 
 import asyncio
+from datetime import timedelta
 import logging
 from typing import Any, Dict, List, Mapping, Optional, TYPE_CHECKING, Tuple
 from asyncio import TimeoutError
@@ -22,7 +23,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.components.binary_sensor import DOMAIN as BINARY_SENSOR_DOMAIN
 from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
-from homeassistant.const import CONF_PASSWORD, CONF_TYPE, CONF_USERNAME
+from homeassistant.const import CONF_PASSWORD, CONF_SCAN_INTERVAL, CONF_TYPE, CONF_USERNAME
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType

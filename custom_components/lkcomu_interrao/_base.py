@@ -34,7 +34,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_platform
-from homeassistant.helpers.entity import Entity
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.typing import ConfigType, StateType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from inter_rao_energosbyt.enums import ProviderType
@@ -365,7 +365,7 @@ SupportedServicesType = Mapping[
 ]
 
 
-class LkcomuInterRAOEntity(CoordinatorEntity[_TAccount], Entity, Generic[_TAccount]):
+class LkcomuInterRAOEntity(CoordinatorEntity[_TAccount], Generic[_TAccount]):
     config_key: ClassVar[str] = NotImplemented
 
     _supported_services: ClassVar[SupportedServicesType] = {}
@@ -385,24 +385,18 @@ class LkcomuInterRAOEntity(CoordinatorEntity[_TAccount], Entity, Generic[_TAccou
         return urlparse(self._account.api.BASE_URL).netloc
 
     @property
-    def device_info(self) -> dict[str, Any]:
+    def device_info(self) -> DeviceInfo:
         account_object = self._account
 
-        device_info = {
-            "name": f"№ {account_object.code}",
-            "identifiers": {
+        return DeviceInfo(
+            name=f"№ {account_object.code}",
+            identifiers={
                 (DOMAIN, f"{account_object.__class__.__name__}__{account_object.id}")
             },
-            "manufacturer": account_object.provider_name,
-            "model": self.api_hostname,
-            "sw_version": account_object.api.APP_VERSION,  # placeholder for future releases
-        }
-
-        # account_address = account_object.address
-        # if account_address is not None:
-        #     device_info["suggested_area"] = account_address
-
-        return device_info
+            manufacturer=account_object.provider_name,
+            model=self.api_hostname,
+            sw_version=account_object.api.APP_VERSION,
+        )
 
     def _handle_dev_presentation(
         self,

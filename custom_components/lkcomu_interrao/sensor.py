@@ -13,7 +13,6 @@ from typing import (
     Any,
     ClassVar,
     Final,
-    Optional,
     TypeVar,
 )
 
@@ -255,7 +254,7 @@ class LkcomuAccount(LkcomuInterRAOEntity[Account]):
         return f"{acc.api.__class__.__name__}_account_{acc.id}"
 
     @property
-    def state(self) -> str | float:
+    def native_value(self) -> str | float:
         if self._account.is_locked:
             return STATE_PROBLEM
         balance = self._balance
@@ -270,7 +269,7 @@ class LkcomuAccount(LkcomuInterRAOEntity[Account]):
         return "mdi:lightning-bolt-circle"
 
     @property
-    def unit_of_measurement(self) -> str | None:
+    def native_unit_of_measurement(self) -> str | None:
         return self.hass.config.currency
 
     @property
@@ -661,7 +660,7 @@ class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters]):
         return f"{acc.api.__class__.__name__}_meter_{acc.id}_{met.id}"
 
     @property
-    def state(self) -> str:
+    def native_value(self) -> str:
         return self._meter.status or STATE_OK
 
     @property
@@ -955,7 +954,7 @@ class LkcomuLastInvoice(LkcomuInterRAOEntity[AbstractAccountWithInvoices]):
         coordinator: "LkcomuInterRAODataUpdateCoordinator",
         account: "Account",
         account_config: ConfigType,
-        last_invoice: Optional["AbstractInvoice"] = None,
+        last_invoice: "AbstractInvoice | None" = None,
     ) -> None:
         super().__init__(coordinator, account, account_config)
         self._last_invoice = last_invoice
@@ -979,7 +978,7 @@ class LkcomuLastInvoice(LkcomuInterRAOEntity[AbstractAccountWithInvoices]):
         return f"{acc.api.__class__.__name__}_lastinvoice_{acc.id}"
 
     @property
-    def state(self) -> float | str:
+    def native_value(self) -> float | str:
         invoice = self._last_invoice
         if invoice:
             if self._account_config[CONF_DEV_PRESENTATION]:
@@ -992,7 +991,7 @@ class LkcomuLastInvoice(LkcomuInterRAOEntity[AbstractAccountWithInvoices]):
         return "mdi:receipt"
 
     @property
-    def unit_of_measurement(self) -> str:
+    def native_unit_of_measurement(self) -> str | None:
         return self.hass.config.currency if self._last_invoice else None
 
     @property

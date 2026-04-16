@@ -10,7 +10,6 @@ from typing import (
     TYPE_CHECKING,
     Any,
     ClassVar,
-    Union,
 )
 
 import voluptuous as vol
@@ -100,7 +99,7 @@ class LkcomuInterRAOConfigFlow(ConfigFlow, domain=DOMAIN):
 
     @staticmethod
     def make_entry_title(
-        api_cls: Union[type["BaseEnergosbytAPI"], "BaseEnergosbytAPI"], username: str
+        api_cls: type["BaseEnergosbytAPI"] | "BaseEnergosbytAPI", username: str
     ) -> str:
         from urllib.parse import urlparse
 
@@ -127,9 +126,8 @@ class LkcomuInterRAOConfigFlow(ConfigFlow, domain=DOMAIN):
 
                 else:
                     try:
-                        loop = asyncio.get_event_loop()
-                        ua = await loop.run_in_executor(
-                            None, partial(UserAgent, fallback=DEFAULT_USER_AGENT)
+                        ua = await self.hass.async_add_executor_job(
+                            partial(UserAgent, fallback=DEFAULT_USER_AGENT)
                         )
                         default_user_agent = ua["google chrome"]
                     except (FakeUserAgentError, Exception):
@@ -293,7 +291,11 @@ class InterRAOOptionsFlow(OptionsFlow):
         self.config_codes: dict[str, list[str]] | None = None
 
     async def async_fetch_config_codes(self):
-        api: BaseEnergosbytAPI = self.config_entry.runtime_data.api
+        runtime_data = getattr(self.config_entry, "runtime_data", None)
+        if runtime_data is None:
+            _LOGGER.warning("Cannot fetch config codes: integration not fully loaded")
+            return {}
+        api: BaseEnergosbytAPI = runtime_data.api
         accounts = await api.async_update_accounts(with_related=True)
         account_codes = {
             account.code for account in accounts.values() if account.code is not None
@@ -334,9 +336,11 @@ class InterRAOOptionsFlow(OptionsFlow):
         options = OrderedDict()
 
         entities: list[LkcomuInterRAOEntity] = []
-        for entity_cls, entities_map in self.config_entry.runtime_data.entities.items():
-            if entity_cls.config_key == config_key:
-                entities.extend(entities_map.values())
+        runtime_data = getattr(self.config_entry, "runtime_data", None)
+        if runtime_data is not None:
+            for entity_cls, entities_map in runtime_data.entities.items():
+                if entity_cls.config_key == config_key:
+                    entities.extend(entities_map.values())
 
         for code in sorted(config_codes.get(config_key, [])):
             text = code
@@ -383,8 +387,8 @@ class InterRAOOptionsFlow(OptionsFlow):
             else:
                 options_value = option_entities.get(config_key_)
 
-                if options_value:
-                    blacklisted = options_value[CONF_DEFAULT]
+                if options_value and isinstance(options_value, dict):
+                    blacklisted = options_value.get(CONF_DEFAULT, True)
 
                     default_value = [
                         key
@@ -432,7 +436,7 @@ class InterRAOOptionsFlow(OptionsFlow):
                 default_value = user_input[scan_interval_key]
 
             else:
-                default_value = option_scan_interval[config_key_][CONF_DEFAULT]
+                default_value = option_scan_interval[config_key_]
 
             if isinstance(default_value, timedelta):
                 default_value = default_value.total_seconds()
@@ -460,7 +464,7 @@ class InterRAOOptionsFlow(OptionsFlow):
             name_format_value = user_input.get(name_format_key)
 
             if name_format_value is None:
-                name_format_value = option_name_format[config_key_][CONF_DEFAULT]
+                name_format_value = option_name_format[config_key_]
 
             schema_dict[vol.Optional(name_format_key, default=name_format_value)] = (
                 cv.string
@@ -554,7 +558,7 @@ class InterRAOOptionsFlow(OptionsFlow):
                         ).strip()
 
                 for config_key, _validator in ENTITY_CODES_VALIDATORS.items():
-                    _save_filter(config_key)
+                    _save_filter(config_key, _validator)
                     _save_scan_interval(config_key)
                     _save_name_format(config_key)
 

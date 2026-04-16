@@ -28,7 +28,7 @@ from homeassistant.const import (
     CONF_TYPE,
     CONF_USERNAME,
 )
-from homeassistant.core import CALLBACK_TYPE, HomeAssistant
+from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
@@ -70,7 +70,6 @@ class LkcomuInterRAORuntimeData:
     final_config: ConfigType
     entities: EntitiesDataType
     update_delegators: UpdateDelegatorsDataType
-    update_listener: CALLBACK_TYPE
     is_in_russia: bool
     provider_icons: dict[str, str] = field(default_factory=dict)
     dev_classes_processed: set[str] = field(default_factory=set)
@@ -346,8 +345,10 @@ async def async_setup_entry(
         )
     )
 
-    # Create options update listener
-    update_listener = config_entry.add_update_listener(async_reload_entry)
+    # Create options update listener (auto-cleaned on unload)
+    config_entry.async_on_unload(
+        config_entry.add_update_listener(async_reload_entry)
+    )
 
     config_entry.runtime_data = LkcomuInterRAORuntimeData(
         api=api_object,
@@ -355,7 +356,6 @@ async def async_setup_entry(
         final_config=user_cfg,
         entities={},
         update_delegators={},
-        update_listener=update_listener,
         is_in_russia=is_in_russia(hass),
     )
 
@@ -404,7 +404,6 @@ async def async_unload_entry(
     )
 
     if unload_ok:
-        config_entry.runtime_data.update_listener()
         await config_entry.runtime_data.api.async_close()
 
         _LOGGER.info(

@@ -11,8 +11,6 @@ if TYPE_CHECKING:
     from custom_components.lkcomu_interrao.coordinator import (
         LkcomuInterRAODataUpdateCoordinator,
     )
-from asyncio import TimeoutError
-
 import aiohttp
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry

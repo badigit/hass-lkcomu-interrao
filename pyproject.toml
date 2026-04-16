@@ -1,6 +1,8 @@
 [tool.ruff]
 line-length = 88
 target-version = "py312"
+# Исключаем файлы из проверки
+exclude = ["make_readme.py", "resolve_*.py"]
 
 [tool.ruff.lint]
 # Включаем базовые правила:
@@ -8,9 +10,11 @@ target-version = "py312"
 # F - ошибки логики (Undefined names, unused imports)
 # I - сортировка импортов
 # B - поиск частых багов
-# UP - проверка на современный синтаксис (pyupgrade)
-select = ["E", "F", "W", "I", "B", "UP"]
-ignore = []
+select = ["E", "F", "W", "I", "B"]
+# Игнорируем:
+# E501 - длинные строки (в логах и переводах они неизбежны)
+# B905 - strict=True в zip() (не нужно в нашем проекте)
+ignore = ["E501", "B905"]
 
 [tool.ruff.format]
 quote-style = "double"

@@ -12,26 +12,15 @@ import asyncio
 import logging
 import re
 from abc import abstractmethod
+from collections.abc import Callable, Hashable, Iterable, Mapping, MutableMapping
 from datetime import timedelta
 from typing import (
-    Any,
-    Callable,
-    ClassVar,
-    Dict,
-    Generic,
-    Hashable,
-    Iterable,
-    List,
-    Mapping,
-    MutableMapping,
-    Optional,
-    Set,
-    SupportsInt,
     TYPE_CHECKING,
-    Tuple,
-    Type,
+    Any,
+    ClassVar,
+    Generic,
+    SupportsInt,
     TypeVar,
-    Union,
 )
 from urllib.parse import urlparse
 
@@ -43,11 +32,12 @@ from homeassistant.const import (
     CONF_TYPE,
     CONF_USERNAME,
 )
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_platform
 from homeassistant.helpers.entity import Entity
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.typing import ConfigType, StateType
-from homeassistant.core import HomeAssistant
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from inter_rao_energosbyt.enums import ProviderType
 
 from custom_components.lkcomu_interrao._util import (
     IS_IN_RUSSIA,
@@ -56,10 +46,10 @@ from custom_components.lkcomu_interrao._util import (
     with_auto_auth,
 )
 from custom_components.lkcomu_interrao.const import (
-    ATTRIBUTION_EN,
-    ATTRIBUTION_RU,
     ATTR_ACCOUNT_CODE,
     ATTR_ACCOUNT_ID,
+    ATTRIBUTION_EN,
+    ATTRIBUTION_RU,
     CONF_ACCOUNTS,
     CONF_DEV_PRESENTATION,
     CONF_NAME_FORMAT,
@@ -78,11 +68,11 @@ from custom_components.lkcomu_interrao.const import (
     FORMAT_VAR_PROVIDER_NAME,
     SUPPORTED_PLATFORMS,
 )
-from inter_rao_energosbyt.enums import ProviderType
 
 if TYPE_CHECKING:
     from homeassistant.helpers.entity_registry import RegistryEntry
     from inter_rao_energosbyt.interfaces import Account, BaseEnergosbytAPI
+
     from custom_components.lkcomu_interrao.coordinator import (
         LkcomuInterRAODataUpdateCoordinator,
     )
@@ -91,17 +81,17 @@ _LOGGER = logging.getLogger(__name__)
 
 _TLkcomuInterRAOEntity = TypeVar("_TLkcomuInterRAOEntity", bound="LkcomuInterRAOEntity")
 
-AddEntitiesCallType = Callable[[List["LkcomuInterRAOEntity"], bool], Any]
-UpdateDelegatorsDataType = Dict[
-    str, Tuple[AddEntitiesCallType, Set[Type["LkcomuInterRAOEntity"]]]
+AddEntitiesCallType = Callable[[list["LkcomuInterRAOEntity"], bool], Any]
+UpdateDelegatorsDataType = dict[
+    str, tuple[AddEntitiesCallType, set[type["LkcomuInterRAOEntity"]]]
 ]
-EntitiesDataType = Dict[
-    Type["LkcomuInterRAOEntity"], Dict[Hashable, "LkcomuInterRAOEntity"]
+EntitiesDataType = dict[
+    type["LkcomuInterRAOEntity"], dict[Hashable, "LkcomuInterRAOEntity"]
 ]
 
 
 def make_common_async_setup_entry(
-    entity_cls: Type["LkcomuInterRAOEntity"], *args: Type["LkcomuInterRAOEntity"]
+    entity_cls: type["LkcomuInterRAOEntity"], *args: type["LkcomuInterRAOEntity"]
 ):
     async def _async_setup_entry(
         hass: HomeAssistant,
@@ -142,8 +132,8 @@ async def async_register_update_delegator(
     config_entry: ConfigEntry,
     platform: str,
     async_add_entities: AddEntitiesCallType,
-    entity_cls: Type["LkcomuInterRAOEntity"],
-    *args: Type["LkcomuInterRAOEntity"],
+    entity_cls: type["LkcomuInterRAOEntity"],
+    *args: type["LkcomuInterRAOEntity"],
     update_after_complete: bool = True,
 ):
     entry_id = config_entry.entry_id
@@ -165,9 +155,9 @@ DEV_CLASSES_PROCESSED = set()
 
 async def async_refresh_api_data(hass: HomeAssistant, config_entry: ConfigEntry):
     entry_id = config_entry.entry_id
-    api: "BaseEnergosbytAPI" = hass.data[DATA_API_OBJECTS][entry_id]
+    api: BaseEnergosbytAPI = hass.data[DATA_API_OBJECTS][entry_id]
 
-    coordinator: "LkcomuInterRAODataUpdateCoordinator" = hass.data[DATA_COORDINATOR][
+    coordinator: LkcomuInterRAODataUpdateCoordinator = hass.data[DATA_COORDINATOR][
         entry_id
     ]
 
@@ -260,9 +250,9 @@ async def async_refresh_api_data(hass: HomeAssistant, config_entry: ConfigEntry)
                         log_prefix_base
                         + " "
                         + (
-                            f"Лицевой счёт пропущен согласно фильтрации"
+                            "Лицевой счёт пропущен согласно фильтрации"
                             if IS_IN_RUSSIA
-                            else f"Account skipped due to filtering"
+                            else "Account skipped due to filtering"
                         )
                     )
                     continue
@@ -374,8 +364,8 @@ _TAccount = TypeVar("_TAccount", bound="Account")
 
 
 SupportedServicesType = Mapping[
-    Optional[Tuple[type, SupportsInt]],
-    Mapping[str, Union[dict, Callable[[dict], dict]]],
+    tuple[type, SupportsInt] | None,
+    Mapping[str, dict | Callable[[dict], dict]],
 ]
 
 
@@ -399,7 +389,7 @@ class LkcomuInterRAOEntity(CoordinatorEntity[_TAccount], Entity, Generic[_TAccou
         return urlparse(self._account.api.BASE_URL).netloc
 
     @property
-    def device_info(self) -> Dict[str, Any]:
+    def device_info(self) -> dict[str, Any]:
         account_object = self._account
 
         device_info = {
@@ -422,7 +412,7 @@ class LkcomuInterRAOEntity(CoordinatorEntity[_TAccount], Entity, Generic[_TAccou
         self,
         mapping: MutableMapping[str, Any],
         filter_vars: Iterable[str],
-        blackout_vars: Optional[Iterable[str]] = None,
+        blackout_vars: Iterable[str] | None = None,
     ) -> None:
         if self._account_config[CONF_DEV_PRESENTATION]:
             filter_vars = set(filter_vars)
@@ -456,7 +446,7 @@ class LkcomuInterRAOEntity(CoordinatorEntity[_TAccount], Entity, Generic[_TAccou
     #################################################################################
 
     @property
-    def account_provider_code(self) -> Optional[str]:
+    def account_provider_code(self) -> str | None:
         try:
             return ProviderType(self._account.provider_type).name.lower()
         except (ValueError, TypeError):
@@ -499,7 +489,7 @@ class LkcomuInterRAOEntity(CoordinatorEntity[_TAccount], Entity, Generic[_TAccou
         return attributes
 
     @property
-    def name(self) -> Optional[str]:
+    def name(self) -> str | None:
         name_format_values = {
             key: ("" if value is None else str(value))
             for key, value in self.name_format_values.items()
@@ -540,9 +530,9 @@ class LkcomuInterRAOEntity(CoordinatorEntity[_TAccount], Entity, Generic[_TAccou
     async def async_will_remove_from_hass(self) -> None:
         _LOGGER.info(self.log_prefix + "Removing from HomeAssistant")
 
-        registry_entry: Optional["RegistryEntry"] = self.registry_entry
+        registry_entry: RegistryEntry | None = self.registry_entry
         if registry_entry:
-            entry_id: Optional[str] = registry_entry.config_entry_id
+            entry_id: str | None = registry_entry.config_entry_id
             if entry_id:
                 data_entities: EntitiesDataType = self.hass.data[DATA_ENTITIES][
                     entry_id
@@ -575,13 +565,13 @@ class LkcomuInterRAOEntity(CoordinatorEntity[_TAccount], Entity, Generic[_TAccou
     @classmethod
     @abstractmethod
     async def async_refresh_accounts(
-        cls: Type[_TLkcomuInterRAOEntity],
+        cls: type[_TLkcomuInterRAOEntity],
         coordinator: "LkcomuInterRAODataUpdateCoordinator",
-        entities: Dict[Hashable, _TLkcomuInterRAOEntity],
+        entities: dict[Hashable, _TLkcomuInterRAOEntity],
         account: "Account",
         config_entry: ConfigEntry,
         account_config: ConfigType,
-    ) -> Optional[Iterable[_TLkcomuInterRAOEntity]]:
+    ) -> Iterable[_TLkcomuInterRAOEntity] | None:
         raise NotImplementedError
 
     #################################################################################
@@ -609,7 +599,7 @@ class LkcomuInterRAOEntity(CoordinatorEntity[_TAccount], Entity, Generic[_TAccou
 
     @property
     @abstractmethod
-    def sensor_related_attributes(self) -> Optional[Mapping[str, Any]]:
+    def sensor_related_attributes(self) -> Mapping[str, Any] | None:
         raise NotImplementedError
 
     @property
@@ -624,10 +614,10 @@ class LkcomuInterRAOEntity(CoordinatorEntity[_TAccount], Entity, Generic[_TAccou
 
     @property
     @abstractmethod
-    def device_class(self) -> Optional[str]:
+    def device_class(self) -> str | None:
         raise NotImplementedError
 
-    def register_supported_services(self, for_object: Optional[Any] = None) -> None:
+    def register_supported_services(self, for_object: Any | None = None) -> None:
         for type_feature, services in self._supported_services.items():
             result, features = (
                 (True, None)

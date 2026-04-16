@@ -13,19 +13,25 @@ __all__ = (
 )
 
 import asyncio
-from datetime import timedelta
 import logging
-from typing import Any, Dict, List, Mapping, Optional, TYPE_CHECKING, Tuple
+from collections.abc import Mapping
+from datetime import timedelta
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.components.binary_sensor import DOMAIN as BINARY_SENSOR_DOMAIN
 from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
-from homeassistant.const import CONF_PASSWORD, CONF_SCAN_INTERVAL, CONF_TYPE, CONF_USERNAME
+from homeassistant.const import (
+    CONF_PASSWORD,
+    CONF_SCAN_INTERVAL,
+    CONF_TYPE,
+    CONF_USERNAME,
+)
+from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
-from homeassistant.core import HomeAssistant
 
 from custom_components.lkcomu_interrao._base import UpdateDelegatorsDataType
 from custom_components.lkcomu_interrao._schema import CONFIG_ENTRY_SCHEMA
@@ -35,9 +41,6 @@ from custom_components.lkcomu_interrao._util import (
     _make_log_prefix,
     import_api_cls,
     mask_username,
-)
-from custom_components.lkcomu_interrao.coordinator import (
-    LkcomuInterRAODataUpdateCoordinator,
 )
 from custom_components.lkcomu_interrao.const import (
     CONF_USER_AGENT,
@@ -51,6 +54,9 @@ from custom_components.lkcomu_interrao.const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
 )
+from custom_components.lkcomu_interrao.coordinator import (
+    LkcomuInterRAODataUpdateCoordinator,
+)
 
 if TYPE_CHECKING:
     from inter_rao_energosbyt.interfaces import BaseEnergosbytAPI
@@ -58,8 +64,8 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 
-def _unique_entries(value: List[Mapping[str, Any]]) -> List[Mapping[str, Any]]:
-    pairs: Dict[Tuple[str, str], Optional[int]] = {}
+def _unique_entries(value: list[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    pairs: dict[tuple[str, str], int | None] = {}
 
     errors = []
     for i, config in enumerate(value):
@@ -323,7 +329,7 @@ async def async_setup_entry(
 
     profile_id = api_object.auth_session.id_profile
 
-    api_objects: Dict[str, "BaseEnergosbytAPI"] = hass_data.setdefault(
+    api_objects: dict[str, BaseEnergosbytAPI] = hass_data.setdefault(
         DATA_API_OBJECTS, {}
     )
     for existing_config_entry_id, existing_api_object in api_objects.items():

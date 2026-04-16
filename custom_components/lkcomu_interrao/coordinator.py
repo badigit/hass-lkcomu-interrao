@@ -2,7 +2,7 @@
 
 import logging
 from datetime import timedelta
-from typing import Dict, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from inter_rao_energosbyt.exceptions import EnergosbytException
@@ -28,7 +28,7 @@ class LkcomuInterRAODataUpdateCoordinator(DataUpdateCoordinator):
         self.api = api
         super().__init__(hass, _LOGGER, name=name, update_interval=update_interval)
 
-    async def _async_update_data(self) -> Dict["AccountID", "Account"]:
+    async def _async_update_data(self) -> dict["AccountID", "Account"]:
         """Update data via library."""
         try:
             # We fetch accounts and their details

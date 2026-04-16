@@ -1,5 +1,7 @@
 import attr
 from homeassistant.const import ATTR_SERVICE
+from inter_rao_energosbyt.interfaces import AbstractInvoice, AbstractPayment
+from inter_rao_energosbyt.presets.byt import BytInvoice
 
 from custom_components.lkcomu_interrao.const import (
     ATTR_AGENT,
@@ -19,8 +21,6 @@ from custom_components.lkcomu_interrao.const import (
     ATTR_STATUS,
     ATTR_TOTAL,
 )
-from inter_rao_energosbyt.interfaces import AbstractInvoice, AbstractPayment
-from inter_rao_energosbyt.presets.byt import BytInvoice
 
 
 def payment_to_attrs(payment: AbstractPayment):

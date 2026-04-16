@@ -1,14 +1,9 @@
 import logging
+from collections.abc import Hashable, Iterable, Mapping
 from typing import (
+    TYPE_CHECKING,
     Any,
     ClassVar,
-    Dict,
-    Hashable,
-    Iterable,
-    Mapping,
-    Optional,
-    TYPE_CHECKING,
-    Type,
     TypeVar,
 )
 
@@ -28,6 +23,12 @@ from homeassistant.const import (
 )
 from homeassistant.helpers.typing import ConfigType, StateType
 from homeassistant.util import slugify
+from inter_rao_energosbyt.exceptions import EnergosbytException
+from inter_rao_energosbyt.interfaces import (
+    AbstractAccountWithPayments,
+    AbstractPayment,
+    Account,
+)
 
 from custom_components.lkcomu_interrao._base import (
     LkcomuInterRAOEntity,
@@ -46,12 +47,6 @@ from custom_components.lkcomu_interrao.const import (
     FORMAT_VAR_TYPE_EN,
     FORMAT_VAR_TYPE_RU,
 )
-from inter_rao_energosbyt.interfaces import (
-    AbstractAccountWithPayments,
-    AbstractPayment,
-    Account,
-)
-from inter_rao_energosbyt.exceptions import EnergosbytException
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -68,12 +63,12 @@ class LkcomuInterRAOLastPayment(
         coordinator: "LkcomuInterRAODataUpdateCoordinator",
         account: "Account",
         account_config: ConfigType,
-        last_payment: Optional[AbstractPayment] = None,
+        last_payment: AbstractPayment | None = None,
     ) -> None:
         super().__init__(coordinator, account, account_config)
         self._last_payment = last_payment
 
-        self._entity_id: Optional[str] = f"binary_sensor." + slugify(
+        self._entity_id: str | None = "binary_sensor." + slugify(
             f"{self.account_provider_code or 'unknown'}_{self._account.code}_last_payment"
         )
 
@@ -83,11 +78,11 @@ class LkcomuInterRAOLastPayment(
         return payment is not None and payment.is_accepted
 
     @property
-    def entity_id(self) -> Optional[str]:
+    def entity_id(self) -> str | None:
         return self._entity_id
 
     @entity_id.setter
-    def entity_id(self, value: Optional[str]) -> None:
+    def entity_id(self, value: str | None) -> None:
         self._entity_id = value
 
     #################################################################################
@@ -96,13 +91,13 @@ class LkcomuInterRAOLastPayment(
 
     @classmethod
     async def async_refresh_accounts(
-        cls: Type[_TLkcomuInterRAOEntity],
+        cls: type[_TLkcomuInterRAOEntity],
         coordinator: "LkcomuInterRAODataUpdateCoordinator",
-        entities: Dict[Hashable, _TLkcomuInterRAOEntity],
+        entities: dict[Hashable, _TLkcomuInterRAOEntity],
         account: "Account",
         config_entry: ConfigEntry,
         account_config: ConfigType,
-    ) -> Optional[Iterable[_TLkcomuInterRAOEntity]]:
+    ) -> Iterable[_TLkcomuInterRAOEntity] | None:
         if isinstance(account, AbstractAccountWithPayments):
             entity_key = account.id
 
@@ -152,7 +147,7 @@ class LkcomuInterRAOLastPayment(
         return "mdi:cash-multiple"
 
     @property
-    def sensor_related_attributes(self) -> Optional[Mapping[str, Any]]:
+    def sensor_related_attributes(self) -> Mapping[str, Any] | None:
         payment = self._last_payment
 
         if payment is None:
@@ -183,7 +178,7 @@ class LkcomuInterRAOLastPayment(
         return f"{acc.api.__class__.__name__}_lastpayment_{acc.id}"
 
     @property
-    def device_class(self) -> Optional[str]:
+    def device_class(self) -> str | None:
         return DOMAIN + "_payment"
 
 

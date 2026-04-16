@@ -5,19 +5,16 @@ Retrieves indications regarding current state of accounts.
 
 import logging
 import re
+from collections.abc import Hashable, Mapping
 from datetime import date, datetime
 from enum import IntEnum
 from typing import (
+    TYPE_CHECKING,
     Any,
     ClassVar,
-    Dict,
     Final,
-    Hashable,
-    Mapping,
     Optional,
-    TYPE_CHECKING,
     TypeVar,
-    Union,
 )
 
 if TYPE_CHECKING:
@@ -42,6 +39,21 @@ STATE_LOCKED = "locked"
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.util import slugify
+from inter_rao_energosbyt.exceptions import EnergosbytException
+from inter_rao_energosbyt.interfaces import (
+    AbstractAccountWithBalance,
+    AbstractAccountWithInvoices,
+    AbstractAccountWithMeters,
+    AbstractAccountWithPayments,
+    AbstractBalance,
+    AbstractCalculatableMeter,
+    AbstractInvoice,
+    AbstractMeter,
+    AbstractSubmittableMeter,
+    Account,
+)
+from inter_rao_energosbyt.presets.byt import AccountWithBytInfo, BytInfoSingle
+from inter_rao_energosbyt.util import process_start_end_arguments
 
 from custom_components.lkcomu_interrao._base import (
     LkcomuInterRAOEntity,
@@ -109,21 +121,6 @@ from custom_components.lkcomu_interrao.const import (
     FORMAT_VAR_TYPE_EN,
     FORMAT_VAR_TYPE_RU,
 )
-from inter_rao_energosbyt.exceptions import EnergosbytException
-from inter_rao_energosbyt.interfaces import (
-    AbstractAccountWithBalance,
-    AbstractAccountWithInvoices,
-    AbstractAccountWithMeters,
-    AbstractAccountWithPayments,
-    AbstractBalance,
-    AbstractCalculatableMeter,
-    AbstractInvoice,
-    AbstractMeter,
-    AbstractSubmittableMeter,
-    Account,
-)
-from inter_rao_energosbyt.presets.byt import AccountWithBytInfo, BytInfoSingle
-from inter_rao_energosbyt.util import process_start_end_arguments
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -223,17 +220,17 @@ class LkcomuAccount(LkcomuInterRAOEntity[Account]):
         coordinator: "LkcomuInterRAODataUpdateCoordinator",
         account: "Account",
         account_config: ConfigType,
-        balance: Optional[AbstractBalance] = None,
+        balance: AbstractBalance | None = None,
     ) -> None:
         super().__init__(coordinator, account, account_config)
         self._balance = balance
 
-        self.entity_id: Optional[str] = f"sensor." + slugify(
+        self.entity_id: str | None = "sensor." + slugify(
             f"{self.account_provider_code or 'unknown'}_{self._account.code}_account"
         )
 
     @property
-    def entity_picture(self) -> Optional[str]:
+    def entity_picture(self) -> str | None:
         if not self._account_config[CONF_LOGOS]:
             return None
 
@@ -256,7 +253,7 @@ class LkcomuAccount(LkcomuInterRAOEntity[Account]):
         return self._account.code
 
     @property
-    def device_class(self) -> Optional[str]:
+    def device_class(self) -> str | None:
         return DOMAIN + "_account"
 
     @property
@@ -266,7 +263,7 @@ class LkcomuAccount(LkcomuInterRAOEntity[Account]):
         return f"{acc.api.__class__.__name__}_account_{acc.id}"
 
     @property
-    def state(self) -> Union[str, float]:
+    def state(self) -> str | float:
         if self._account.is_locked:
             return STATE_PROBLEM
         balance = self._balance
@@ -281,11 +278,11 @@ class LkcomuAccount(LkcomuInterRAOEntity[Account]):
         return "mdi:lightning-bolt-circle"
 
     @property
-    def unit_of_measurement(self) -> Optional[str]:
+    def unit_of_measurement(self) -> str | None:
         return "руб."
 
     @property
-    def sensor_related_attributes(self) -> Optional[Mapping[str, Any]]:
+    def sensor_related_attributes(self) -> Mapping[str, Any] | None:
         account = self._account
         service_type_value = account.service_type
         service_type = (
@@ -386,7 +383,7 @@ class LkcomuAccount(LkcomuInterRAOEntity[Account]):
     async def async_refresh_accounts(
         cls,
         coordinator: "LkcomuInterRAODataUpdateCoordinator",
-        entities: Dict[Hashable, _TLkcomuInterRAOEntity],
+        entities: dict[Hashable, _TLkcomuInterRAOEntity],
         account: "Account",
         config_entry: ConfigEntry,
         account_config: ConfigType,
@@ -434,8 +431,8 @@ class LkcomuAccount(LkcomuInterRAOEntity[Account]):
         if not isinstance(account, AbstractAccountWithPayments):
             raise ValueError("account does not support payments retrieval")
 
-        dt_start: Optional["datetime"] = call_data[ATTR_START]
-        dt_end: Optional["datetime"] = call_data[ATTR_END]
+        dt_start: datetime | None = call_data[ATTR_START]
+        dt_end: datetime | None = call_data[ATTR_END]
 
         dt_start, dt_end = process_start_end_arguments(dt_start, dt_end)
         results = []
@@ -486,8 +483,8 @@ class LkcomuAccount(LkcomuInterRAOEntity[Account]):
         if not isinstance(account, AbstractAccountWithInvoices):
             raise ValueError("account does not support invoices retrieval")
 
-        dt_start: Optional["datetime"] = call_data[ATTR_START]
-        dt_end: Optional["datetime"] = call_data[ATTR_END]
+        dt_start: datetime | None = call_data[ATTR_START]
+        dt_end: datetime | None = call_data[ATTR_END]
 
         dt_start, dt_end = process_start_end_arguments(dt_start, dt_end)
         results = []
@@ -598,7 +595,7 @@ class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters]):
         super().__init__(coordinator, account, account_config)
         self._meter = meter
 
-        self.entity_id: Optional[str] = f"sensor." + slugify(
+        self.entity_id: str | None = "sensor." + slugify(
             f"{self.account_provider_code or 'unknown'}_{self._account.code}_meter_{self.code}"
         )
 
@@ -610,7 +607,7 @@ class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters]):
     async def async_refresh_accounts(
         cls,
         coordinator: "LkcomuInterRAODataUpdateCoordinator",
-        entities: Dict[Hashable, Optional[_TLkcomuInterRAOEntity]],
+        entities: dict[Hashable, _TLkcomuInterRAOEntity | None],
         account: "Account",
         config_entry: ConfigEntry,
         account_config: ConfigType,
@@ -680,7 +677,7 @@ class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters]):
         return "mdi:counter"
 
     @property
-    def device_class(self) -> Optional[str]:
+    def device_class(self) -> str | None:
         return DOMAIN + "_meter"
 
     @property
@@ -693,7 +690,7 @@ class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters]):
         )
 
     @property
-    def sensor_related_attributes(self) -> Optional[Mapping[str, Any]]:
+    def sensor_related_attributes(self) -> Mapping[str, Any] | None:
         met = self._meter
         attributes = {
             ATTR_METER_CODE: met.code,
@@ -820,10 +817,8 @@ class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters]):
 
         hass.bus.async_fire(event_type=event_id, event_data=event_data)
 
-    def _get_real_indications(
-        self, call_data: Mapping
-    ) -> Mapping[str, Union[int, float]]:
-        indications: Mapping[str, Union[int, float]] = call_data[ATTR_INDICATIONS]
+    def _get_real_indications(self, call_data: Mapping) -> Mapping[str, int | float]:
+        indications: Mapping[str, int | float] = call_data[ATTR_INDICATIONS]
         meter_zones = self._meter.zones
 
         for zone_id, new_value in indications.items():
@@ -975,7 +970,7 @@ class LkcomuLastInvoice(LkcomuInterRAOEntity[AbstractAccountWithInvoices]):
         super().__init__(coordinator, account, account_config)
         self._last_invoice = last_invoice
 
-        self.entity_id: Optional[str] = "sensor." + slugify(
+        self.entity_id: str | None = "sensor." + slugify(
             f"{self.account_provider_code or 'unknown'}_{self._account.code}_last_invoice"
         )
 
@@ -984,7 +979,7 @@ class LkcomuLastInvoice(LkcomuInterRAOEntity[AbstractAccountWithInvoices]):
         return self._account.code
 
     @property
-    def device_class(self) -> Optional[str]:
+    def device_class(self) -> str | None:
         return DOMAIN + "_invoice"
 
     @property
@@ -994,7 +989,7 @@ class LkcomuLastInvoice(LkcomuInterRAOEntity[AbstractAccountWithInvoices]):
         return f"{acc.api.__class__.__name__}_lastinvoice_{acc.id}"
 
     @property
-    def state(self) -> Union[float, str]:
+    def state(self) -> float | str:
         invoice = self._last_invoice
         if invoice:
             if self._account_config[CONF_DEV_PRESENTATION]:
@@ -1049,7 +1044,7 @@ class LkcomuLastInvoice(LkcomuInterRAOEntity[AbstractAccountWithInvoices]):
     async def async_refresh_accounts(
         cls,
         coordinator: "LkcomuInterRAODataUpdateCoordinator",
-        entities: Dict[Hashable, _TLkcomuInterRAOEntity],
+        entities: dict[Hashable, _TLkcomuInterRAOEntity],
         account: "Account",
         config_entry: ConfigEntry,
         account_config: ConfigType,

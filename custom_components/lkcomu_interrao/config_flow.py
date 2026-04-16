@@ -3,18 +3,13 @@
 import asyncio
 import logging
 from collections import OrderedDict
+from collections.abc import Iterable, Mapping
 from datetime import timedelta
 from functools import partial
 from typing import (
+    TYPE_CHECKING,
     Any,
     ClassVar,
-    Dict,
-    Iterable,
-    List,
-    Mapping,
-    Optional,
-    TYPE_CHECKING,
-    Type,
     Union,
 )
 
@@ -31,6 +26,14 @@ from homeassistant.const import (
 )
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
+from inter_rao_energosbyt.const import DEFAULT_USER_AGENT
+from inter_rao_energosbyt.exceptions import EnergosbytException
+from inter_rao_energosbyt.interfaces import (
+    AbstractAccountWithMeters,
+    AbstractMeter,
+    Account,
+    BaseEnergosbytAPI,
+)
 
 from custom_components.lkcomu_interrao._util import import_api_cls
 from custom_components.lkcomu_interrao.const import (
@@ -44,14 +47,6 @@ from custom_components.lkcomu_interrao.const import (
     DATA_API_OBJECTS,
     DATA_ENTITIES,
     DOMAIN,
-)
-from inter_rao_energosbyt.const import DEFAULT_USER_AGENT
-from inter_rao_energosbyt.exceptions import EnergosbytException
-from inter_rao_energosbyt.interfaces import (
-    AbstractAccountWithMeters,
-    AbstractMeter,
-    Account,
-    BaseEnergosbytAPI,
 )
 
 if TYPE_CHECKING:
@@ -78,14 +73,14 @@ class LkcomuInterRAOConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
     CONNECTION_CLASS = config_entries.CONN_CLASS_CLOUD_POLL
 
-    CACHED_API_TYPE_NAMES: ClassVar[Optional[Dict[str, Any]]] = {}
+    CACHED_API_TYPE_NAMES: ClassVar[dict[str, Any] | None] = {}
 
     def __init__(self):
         """Instantiate config flow."""
         self._current_type = None
-        self._current_config: Optional[ConfigType] = None
+        self._current_config: ConfigType | None = None
         self._devices_info = None
-        self._accounts: Optional[Mapping[int, "Account"]] = None
+        self._accounts: Mapping[int, Account] | None = None
 
         self.schema_user = None
 
@@ -103,7 +98,7 @@ class LkcomuInterRAOConfigFlow(ConfigFlow, domain=DOMAIN):
 
     @staticmethod
     def make_entry_title(
-        api_cls: Union[Type["BaseEnergosbytAPI"], "BaseEnergosbytAPI"], username: str
+        api_cls: Union[type["BaseEnergosbytAPI"], "BaseEnergosbytAPI"], username: str
     ) -> str:
         from urllib.parse import urlparse
 
@@ -111,13 +106,13 @@ class LkcomuInterRAOConfigFlow(ConfigFlow, domain=DOMAIN):
 
     # Initial step for user interaction
     async def async_step_user(
-        self, user_input: Optional[ConfigType] = None
-    ) -> Dict[str, Any]:
+        self, user_input: ConfigType | None = None
+    ) -> dict[str, Any]:
         """Handle a flow start."""
         if self.schema_user is None:
             try:
                 # noinspection PyUnresolvedReferences
-                from fake_useragent import UserAgent, FakeUserAgentError
+                from fake_useragent import FakeUserAgentError, UserAgent
 
             except ImportError:
                 default_user_agent = DEFAULT_USER_AGENT
@@ -188,8 +183,8 @@ class LkcomuInterRAOConfigFlow(ConfigFlow, domain=DOMAIN):
         return await self.async_step_select()
 
     async def async_step_select(
-        self, user_input: Optional[ConfigType] = None
-    ) -> Dict[str, Any]:
+        self, user_input: ConfigType | None = None
+    ) -> dict[str, Any]:
         accounts, current_config = self._accounts, self._current_config
         if user_input is None:
             if accounts is None or current_config is None:
@@ -228,8 +223,8 @@ class LkcomuInterRAOConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_import(
-        self, user_input: Optional[ConfigType] = None
-    ) -> Dict[str, Any]:
+        self, user_input: ConfigType | None = None
+    ) -> dict[str, Any]:
         if user_input is None:
             return self.async_abort(reason="unknown_error")
 
@@ -264,10 +259,10 @@ class InterRAOOptionsFlow(OptionsFlow):
     def __init__(self, config_entry: ConfigEntry):
         self.config_entry = config_entry
         self.use_text_fields = False
-        self.config_codes: Optional[Dict[str, List[str]]] = None
+        self.config_codes: dict[str, list[str]] | None = None
 
     async def async_fetch_config_codes(self):
-        api: "BaseEnergosbytAPI" = self.hass.data[DATA_API_OBJECTS][
+        api: BaseEnergosbytAPI = self.hass.data[DATA_API_OBJECTS][
             self.config_entry.entry_id
         ]
         accounts = await api.async_update_accounts(with_related=True)
@@ -281,9 +276,7 @@ class InterRAOOptionsFlow(OptionsFlow):
             if isinstance(account, AbstractAccountWithMeters)
         )
 
-        meters_maps: Iterable[Mapping[int, "AbstractMeter"]] = await asyncio.gather(
-            *aws
-        )
+        meters_maps: Iterable[Mapping[int, AbstractMeter]] = await asyncio.gather(*aws)
         meter_codes = set()
 
         for meters_map in meters_maps:
@@ -297,7 +290,7 @@ class InterRAOOptionsFlow(OptionsFlow):
             CONF_METERS: sorted(meter_codes),
         }
 
-    async def async_get_options_multiselect(self, config_key: str) -> Dict[str, str]:
+    async def async_get_options_multiselect(self, config_key: str) -> dict[str, str]:
         if self.config_codes is None:
             try:
                 self.config_codes = await self.async_fetch_config_codes()
@@ -311,7 +304,7 @@ class InterRAOOptionsFlow(OptionsFlow):
 
         options = OrderedDict()
 
-        entities: List["LkcomuInterRAOEntity"] = (
+        entities: list[LkcomuInterRAOEntity] = (
             self.hass.data.get(DATA_ENTITIES, {})
             .get(self.config_entry.entry_id, {})
             .get(config_key, [])
@@ -330,7 +323,7 @@ class InterRAOOptionsFlow(OptionsFlow):
         return options
 
     async def async_generate_schema_dict(
-        self, user_input: Optional[ConfigType] = None
+        self, user_input: ConfigType | None = None
     ) -> OrderedDict:
         user_input = user_input or {}
 
@@ -462,8 +455,8 @@ class InterRAOOptionsFlow(OptionsFlow):
         return schema_dict
 
     async def async_step_init(
-        self, user_input: Optional[ConfigType] = None
-    ) -> Dict[str, Any]:
+        self, user_input: ConfigType | None = None
+    ) -> dict[str, Any]:
         if self.config_entry.source == config_entries.SOURCE_IMPORT:
             return self.async_abort(reason="yaml_not_supported")
 

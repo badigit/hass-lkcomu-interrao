@@ -3,7 +3,10 @@ import json
 import re
 from genericpath import exists
 from io import StringIO
+from itertools import chain
 from os import getcwd, listdir, makedirs, path, rename
+from sys import stdout
+from time import sleep
 from typing import TextIO
 
 from homeassistant.const import (
@@ -13,9 +16,12 @@ from homeassistant.const import (
     CONF_TYPE,
     CONF_USERNAME,
 )
-from itertools import chain
-from sys import stdout
-from time import sleep
+from inter_rao_energosbyt.enums import ProviderType, ServiceType
+from inter_rao_energosbyt.interfaces import (
+    AbstractAccountWithInvoices,
+    AbstractAccountWithMeters,
+    AbstractAccountWithPayments,
+)
 
 from custom_components.lkcomu_interrao import (
     API_TYPE_DEFAULT,
@@ -59,12 +65,6 @@ from custom_components.lkcomu_interrao.sensor import (
     SERVICE_GET_PAYMENTS,
     SERVICE_PUSH_INDICATIONS,
     SERVICE_SET_DESCRIPTION,
-)
-from inter_rao_energosbyt.enums import ProviderType, ServiceType
-from inter_rao_energosbyt.interfaces import (
-    AbstractAccountWithInvoices,
-    AbstractAccountWithMeters,
-    AbstractAccountWithPayments,
 )
 
 
@@ -237,12 +237,12 @@ def _get_providers_content() -> str:
 
 def _get_gui_configuration() -> str:
     with open(
-        "custom_components/lkcomu_interrao/translations/ru.json", "r", encoding="utf-8"
+        "custom_components/lkcomu_interrao/translations/ru.json", encoding="utf-8"
     ) as f:
         trans_ru = json.load(f)
 
     with open(
-        "custom_components/lkcomu_interrao/translations/en.json", "r", encoding="utf-8"
+        "custom_components/lkcomu_interrao/translations/en.json", encoding="utf-8"
     ) as f:
         trans_en = json.load(f)
 
@@ -488,7 +488,7 @@ def make_readme(file: TextIO, template: str):
 
 def main():
     with open("README.md", "w", encoding="utf-8", newline="\n") as f:
-        with open("README.template.md", "r", encoding="utf-8") as tpl:
+        with open("README.template.md", encoding="utf-8") as tpl:
             make_readme(f, tpl.read())
 
     exit(0)

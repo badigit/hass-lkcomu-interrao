@@ -1,38 +1,31 @@
 import asyncio
 import datetime
+import functools
 import re
+from collections.abc import Callable, Coroutine
 from datetime import timedelta
 from typing import (
-    Any,
-    Callable,
-    Coroutine,
-    Dict,
-    Optional,
-    Set,
     TYPE_CHECKING,
-    Type,
+    Any,
     TypeVar,
-    Union,
 )
-import functools
 
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_TYPE, CONF_USERNAME
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import EntityPlatform
-from homeassistant.core import HomeAssistant
-
-from custom_components.lkcomu_interrao.const import DOMAIN
 from inter_rao_energosbyt.enums import ProviderType
 from inter_rao_energosbyt.exceptions import EnergosbytException
+
+from custom_components.lkcomu_interrao.const import DOMAIN
 
 if TYPE_CHECKING:
     from inter_rao_energosbyt.interfaces import BaseEnergosbytAPI
 
 
 def _make_log_prefix(
-    config_entry: Union[Any, ConfigEntry], domain: Union[Any, EntityPlatform], *args
+    config_entry: Any | ConfigEntry, domain: Any | EntityPlatform, *args
 ):
     join_args = [
         (
@@ -51,7 +44,7 @@ def _make_log_prefix(
 @callback
 def _find_existing_entry(
     hass: HomeAssistant, type_: str, username: str
-) -> Optional[config_entries.ConfigEntry]:
+) -> config_entries.ConfigEntry | None:
     existing_entries = hass.config_entries.async_entries(DOMAIN)
     for config_entry in existing_entries:
         if (
@@ -61,7 +54,7 @@ def _find_existing_entry(
             return config_entry
 
 
-async def import_api_cls(hass: HomeAssistant, type_: str) -> Type["BaseEnergosbytAPI"]:
+async def import_api_cls(hass: HomeAssistant, type_: str) -> type["BaseEnergosbytAPI"]:
     """Import API class by type."""
     module = await hass.async_add_executor_job(
         functools.partial(
@@ -85,7 +78,7 @@ def mask_username(username: str):
 
 _RE_FAVICON = re.compile(r'["\']?REACT_APP_FAVICON["\']?\s*:\s*"([\w.]+\.ico)"')
 
-ICONS_FOR_PROVIDERS: Dict[str, Optional[Union[asyncio.Future, str]]] = {}
+ICONS_FOR_PROVIDERS: dict[str, asyncio.Future | str | None] = {}
 
 
 def _make_code_search_index(code):
@@ -93,8 +86,8 @@ def _make_code_search_index(code):
 
 
 async def async_get_icons_for_providers(
-    api: "BaseEnergosbytAPI", provider_types: Set[int]
-) -> Dict[str, str]:
+    api: "BaseEnergosbytAPI", provider_types: set[int]
+) -> dict[str, str]:
     session = api._session
     base_url = api.BASE_URL
     icons = {}
@@ -155,7 +148,7 @@ async def async_get_icons_for_providers(
     return icons
 
 
-LOCAL_TIMEZONE = datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo
+LOCAL_TIMEZONE = datetime.datetime.now(datetime.UTC).astimezone().tzinfo
 
 # Kaliningrad is excluded as it is not supported
 IS_IN_RUSSIA = (

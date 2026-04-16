@@ -88,7 +88,10 @@ def _make_code_search_index(code):
 async def async_get_icons_for_providers(
     api: "BaseEnergosbytAPI", provider_types: set[int]
 ) -> dict[str, str]:
-    session = api._session
+    session = api._session  # noqa: SLF001
+    # Explanation: BaseEnergosbytAPI does not provide a public session object,
+    # and this function needs to perform additional requests to the same base URL
+    # to fetch provider icons.
     base_url = api.BASE_URL
     icons = {}
 
@@ -148,12 +151,26 @@ async def async_get_icons_for_providers(
     return icons
 
 
-LOCAL_TIMEZONE = datetime.datetime.now(datetime.UTC).astimezone().tzinfo
+def is_in_russia(hass: HomeAssistant) -> bool:
+    """Check if the Home Assistant instance is in Russia."""
+    if hass.config.country == "RU":
+        return True
 
-# Kaliningrad is excluded as it is not supported
-IS_IN_RUSSIA = (
-    timedelta(hours=3) <= LOCAL_TIMEZONE.utcoffset(None) <= timedelta(hours=12)
-)
+    tz = hass.config.time_zone
+    if tz and (
+        tz.startswith("Europe/Moscow")
+        or tz.startswith("Asia/")
+        or tz.startswith("Europe/Samara")
+        or tz.startswith("Europe/Saratov")
+        or tz.startswith("Europe/Ulyanovsk")
+        or tz.startswith("Europe/Astrakhan")
+        or tz.startswith("Europe/Volgograd")
+        or tz.startswith("Europe/Kaliningrad")
+        or tz.startswith("Europe/Kirov")
+    ):
+        return True
+
+    return False
 _T = TypeVar("_T")
 _RT = TypeVar("_RT")
 

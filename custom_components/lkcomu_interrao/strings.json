@@ -6,7 +6,8 @@
     },
     "error": {
       "authentication_error": "Authentication error! This might be due to bad credentials or server connectivity issues",
-      "api_load_error": "API loading error. Please, report this to the developer as soon as possible!"
+      "api_load_error": "API loading error. Please, report this to the developer as soon as possible!",
+      "update_accounts_error": "Error updating accounts. Please, check your connectivity and try again later."
     },
     "step": {
       "user": {

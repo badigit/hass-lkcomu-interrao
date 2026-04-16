@@ -49,12 +49,11 @@ from custom_components.lkcomu_interrao.const import (
     CONF_METERS,
     CONF_NAME_FORMAT,
     CONF_USER_AGENT,
-    DATA_API_OBJECTS,
-    DATA_ENTITIES,
     DOMAIN,
 )
 
 if TYPE_CHECKING:
+    from custom_components.lkcomu_interrao.__init__ import LkcomuInterRAOConfigEntry
     from custom_components.lkcomu_interrao._base import LkcomuInterRAOEntity
 
 _LOGGER = logging.getLogger(__name__)
@@ -76,7 +75,6 @@ class LkcomuInterRAOConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Inter RAO config entries."""
 
     VERSION = 1
-    CONNECTION_CLASS = config_entries.CONN_CLASS_CLOUD_POLL
 
     CACHED_API_TYPE_NAMES: ClassVar[dict[str, Any] | None] = {}
 
@@ -169,7 +167,7 @@ class LkcomuInterRAOConfigFlow(ConfigFlow, domain=DOMAIN):
                 return self.async_abort(reason="already_configured_service")
 
         try:
-            api_cls = import_api_cls(type_)
+            api_cls = await import_api_cls(self.hass, type_)
         except (ImportError, AttributeError):
             _LOGGER.error("Could not find API type: %s", type_)
             return self.async_abort(reason="api_load_error")
@@ -217,7 +215,7 @@ class LkcomuInterRAOConfigFlow(ConfigFlow, domain=DOMAIN):
         accounts, current_config = self._accounts, self._current_config
         if user_input is None:
             if accounts is None or current_config is None:
-                print("CONFIGS ARE NONE", accounts, current_config)
+                _LOGGER.debug("CONFIGS ARE NONE %s %s", accounts, current_config)
                 return await self.async_step_user()
 
             return self.async_show_form(
@@ -245,7 +243,7 @@ class LkcomuInterRAOConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return self.async_create_entry(
             title=self.make_entry_title(
-                import_api_cls(current_config[CONF_TYPE]),
+                await import_api_cls(self.hass, current_config[CONF_TYPE]),
                 current_config[CONF_USERNAME],
             ),
             data=_flatten(current_config),
@@ -263,7 +261,7 @@ class LkcomuInterRAOConfigFlow(ConfigFlow, domain=DOMAIN):
         if await self._check_entry_exists(type_, username):
             return self.async_abort(reason="already_exists")
 
-        api_cls = import_api_cls(type_)
+        api_cls = await import_api_cls(self.hass, type_)
 
         return self.async_create_entry(
             title=self.make_entry_title(api_cls, username),
@@ -274,7 +272,7 @@ class LkcomuInterRAOConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: Mapping[str, Any] | None = None
     ) -> dict[str, Any]:
         """Handle re-authentication."""
-        return await self.async_step_user(user_input)
+        return await self.async_step_user(None)
 
     @staticmethod
     @callback
@@ -291,15 +289,13 @@ CONF_USE_TEXT_FIELDS = "use_text_fields"
 class InterRAOOptionsFlow(OptionsFlow):
     """Handler for Inter RAO options"""
 
-    def __init__(self, config_entry: ConfigEntry):
+    def __init__(self, config_entry: "LkcomuInterRAOConfigEntry"):
         self.config_entry = config_entry
         self.use_text_fields = False
         self.config_codes: dict[str, list[str]] | None = None
 
     async def async_fetch_config_codes(self):
-        api: BaseEnergosbytAPI = self.hass.data[DATA_API_OBJECTS][
-            self.config_entry.entry_id
-        ]
+        api: BaseEnergosbytAPI = self.config_entry.runtime_data.api
         accounts = await api.async_update_accounts(with_related=True)
         account_codes = {
             account.code for account in accounts.values() if account.code is not None
@@ -339,11 +335,10 @@ class InterRAOOptionsFlow(OptionsFlow):
 
         options = OrderedDict()
 
-        entities: list[LkcomuInterRAOEntity] = (
-            self.hass.data.get(DATA_ENTITIES, {})
-            .get(self.config_entry.entry_id, {})
-            .get(config_key, [])
-        )
+        entities: list[LkcomuInterRAOEntity] = []
+        for entity_cls, entities_map in self.config_entry.runtime_data.entities.items():
+            if entity_cls.config_key == config_key:
+                entities.extend(entities_map.values())
 
         for code in sorted(config_codes.get(config_key, [])):
             text = code
@@ -576,4 +571,6 @@ class InterRAOOptionsFlow(OptionsFlow):
 
         return self.async_show_form(
             step_id="init", data_schema=vol.Schema(schema_dict), errors=errors or None
+        )
+rors or None
         )

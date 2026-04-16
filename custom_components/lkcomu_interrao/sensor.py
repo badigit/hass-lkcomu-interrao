@@ -233,19 +233,13 @@ class LkcomuAccount(LkcomuInterRAOEntity[Account]):
         if not self._account_config[CONF_LOGOS]:
             return None
 
-        logos = self.hass.data.get(DATA_PROVIDER_LOGOS)
-        if not logos:
-            return None
-
         account_provider_code = self.account_provider_code
         if account_provider_code is None:
             return None
 
-        provider_logo = logos.get(account_provider_code)
-        if isinstance(provider_logo, str):
-            return provider_logo
-
-        return None
+        return self.coordinator.config_entry.runtime_data.provider_icons.get(
+            account_provider_code
+        )
 
     @property
     def code(self) -> str:
@@ -278,7 +272,7 @@ class LkcomuAccount(LkcomuInterRAOEntity[Account]):
 
     @property
     def unit_of_measurement(self) -> str | None:
-        return "руб."
+        return self.hass.config.currency
 
     @property
     def sensor_related_attributes(self) -> Mapping[str, Any] | None:
@@ -459,7 +453,7 @@ class LkcomuAccount(LkcomuInterRAOEntity[Account]):
                 event_data[ATTR_SUM] += payment.amount
                 results.append(payment_to_attrs(payment))
 
-        except BaseException as e:
+        except Exception as e:
             event_data[ATTR_COMMENT] = "Unknown error: %r" % e
             _LOGGER.exception(event_data[ATTR_COMMENT])
             raise
@@ -511,7 +505,7 @@ class LkcomuAccount(LkcomuInterRAOEntity[Account]):
                 event_data[ATTR_SUM] += invoice.total
                 results.append(invoice_to_attrs(invoice))
 
-        except BaseException as e:
+        except Exception as e:
             event_data[ATTR_COMMENT] = "Unknown error: %r" % e
             _LOGGER.exception(event_data[ATTR_COMMENT])
             raise
@@ -879,7 +873,7 @@ class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters]):
                 event_data[ATTR_COMMENT] = "API error: %s" % e
                 raise
 
-            except BaseException as e:
+            except Exception as e:
                 event_data[ATTR_COMMENT] = "Unknown error: %r" % e
                 _LOGGER.error(event_data[ATTR_COMMENT])
                 raise
@@ -933,7 +927,7 @@ class LkcomuMeter(LkcomuInterRAOEntity[AbstractAccountWithMeters]):
             event_data[ATTR_COMMENT] = "Error: %s" % e
             raise
 
-        except BaseException as e:
+        except Exception as e:
             event_data[ATTR_COMMENT] = "Unknown error: %r" % e
             _LOGGER.exception(event_data[ATTR_COMMENT])
             raise
@@ -1002,7 +996,7 @@ class LkcomuLastInvoice(LkcomuInterRAOEntity[AbstractAccountWithInvoices]):
 
     @property
     def unit_of_measurement(self) -> str:
-        return "руб." if self._last_invoice else None
+        return self.hass.config.currency if self._last_invoice else None
 
     @property
     def sensor_related_attributes(self):

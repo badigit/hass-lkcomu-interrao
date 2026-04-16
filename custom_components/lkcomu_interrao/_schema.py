@@ -15,7 +15,6 @@ from homeassistant.const import (
 )
 from homeassistant.helpers import config_validation as cv
 
-from custom_components.lkcomu_interrao._util import IS_IN_RUSSIA
 from custom_components.lkcomu_interrao.const import (
     API_TYPE_DEFAULT,
     API_TYPE_NAMES,
@@ -27,10 +26,6 @@ from custom_components.lkcomu_interrao.const import (
     CONF_METERS,
     CONF_NAME_FORMAT,
     CONF_USER_AGENT,
-    DEFAULT_NAME_FORMAT_EN_ACCOUNTS,
-    DEFAULT_NAME_FORMAT_EN_LAST_INVOICE,
-    DEFAULT_NAME_FORMAT_EN_LAST_PAYMENT,
-    DEFAULT_NAME_FORMAT_EN_METERS,
     DEFAULT_NAME_FORMAT_RU_ACCOUNTS,
     DEFAULT_NAME_FORMAT_RU_LAST_INVOICE,
     DEFAULT_NAME_FORMAT_RU_LAST_PAYMENT,
@@ -47,19 +42,10 @@ MIN_SCAN_INTERVAL = timedelta(seconds=60)
     default_name_format_meters,
     default_name_format_last_payment,
 ) = (
-    (
-        DEFAULT_NAME_FORMAT_RU_ACCOUNTS,
-        DEFAULT_NAME_FORMAT_RU_LAST_INVOICE,
-        DEFAULT_NAME_FORMAT_RU_METERS,
-        DEFAULT_NAME_FORMAT_RU_LAST_PAYMENT,
-    )
-    if IS_IN_RUSSIA
-    else (
-        DEFAULT_NAME_FORMAT_EN_ACCOUNTS,
-        DEFAULT_NAME_FORMAT_EN_LAST_INVOICE,
-        DEFAULT_NAME_FORMAT_EN_METERS,
-        DEFAULT_NAME_FORMAT_EN_LAST_PAYMENT,
-    )
+    DEFAULT_NAME_FORMAT_RU_ACCOUNTS,
+    DEFAULT_NAME_FORMAT_RU_LAST_INVOICE,
+    DEFAULT_NAME_FORMAT_RU_METERS,
+    DEFAULT_NAME_FORMAT_RU_LAST_PAYMENT,
 )
 
 

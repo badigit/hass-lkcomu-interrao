@@ -74,13 +74,7 @@ CONF_METERS: Final = "meters"
 CONF_NAME_FORMAT: Final = "name_format"
 CONF_USER_AGENT: Final = "user_agent"
 
-DATA_API_OBJECTS: Final = DOMAIN + "_api_objects"
-DATA_COORDINATOR: Final = DOMAIN + "_coordinator"
-DATA_ENTITIES: Final = DOMAIN + "_entities"
-DATA_FINAL_CONFIG: Final = DOMAIN + "_final_config"
 DATA_PROVIDER_LOGOS: Final = DOMAIN + "_provider_logos"
-DATA_UPDATE_DELEGATORS: Final = DOMAIN + "_update_delegators"
-DATA_UPDATE_LISTENERS: Final = DOMAIN + "_update_listeners"
 DATA_YAML_CONFIG: Final = DOMAIN + "_yaml_config"
 
 DEFAULT_NAME_FORMAT_EN_ACCOUNTS: Final = (

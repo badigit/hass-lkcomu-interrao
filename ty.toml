@@ -1,0 +1,12 @@
+# ty — малошумный тайпчекер: ловит ошибки типов, не навязывает стиль.
+# Запуск: ty check
+[rules]
+unresolved-attribute = "ignore"
+invalid-argument-type = "ignore"
+
+[[overrides]]
+include = ["tests/**"]
+
+[overrides.rules]
+not-subscriptable = "ignore"
+unsupported-operator = "ignore"
